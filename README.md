@@ -96,7 +96,7 @@ A real deployment would add authentication and per-recruiter authorization on co
 
 ## Setup and usage
 
-Requirements: Python 3.12, Node.js 20+ (developed on Node 24), `make`. No OpenAI key is needed.
+Requirements: Python 3.12, Node.js 22.12+ (developed on Node 24), `make`. No OpenAI key is needed.
 
 ```bash
 make install        # creates backend/.venv, installs backend and frontend dependencies

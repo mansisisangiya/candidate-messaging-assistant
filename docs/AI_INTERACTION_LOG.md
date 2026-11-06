@@ -159,4 +159,6 @@ The reviews came from a separate Claude Code session used as an independent code
 
 Timestamps in docs/reports/test-report.md are in IST; the log timestamps are UTC.
 
+Correction (after the first GitHub CI run, run 42276712289): the "CI runs Node 20" note above was wrong to rely on. The frontend job failed at `npm test` because vitest 5.1.0, jsdom 31 and @testing-library/jest-dom 7 need Node 22 or newer; it passed locally only because the machine runs Node 24. CI now uses Node 22 and `package.json` declares `engines.node >= 22.12`. I had not checked the dependencies' Node requirements against the CI version.
+
 <!-- Add new entries below. Format: number, title, prompt summary, AI output, outcome (accepted / modified / rejected, and why). -->

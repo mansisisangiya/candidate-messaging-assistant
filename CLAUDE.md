@@ -13,7 +13,7 @@ This is a 2-4 hour engineering assessment for an AI Full Stack Engineer role. Pr
 ## Technology stack
 
 - Backend: Python 3.12, FastAPI, Pydantic v2, SQLite (stdlib `sqlite3`), JSON fixtures
-- Frontend: React + TypeScript (Vite), Node 20
+- Frontend: React + TypeScript (Vite), Node 22
 - Tests: pytest, Vitest (+ Testing Library), Playwright
 - Lint/type: ruff (backend), tsc (frontend)
 - CI: GitHub Actions
