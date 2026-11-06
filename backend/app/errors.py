@@ -33,3 +33,13 @@ class FixtureError(AppError):
     """Fixture data is malformed or has dangling references."""
 
     code = "invalid_fixture"
+
+
+class LLMError(AppError):
+    """The LLM call failed or returned something unusable."""
+
+    code = "llm_error"
+
+
+class MaxStepsExceededError(AppError):
+    code = "max_steps_exceeded"

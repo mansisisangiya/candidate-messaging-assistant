@@ -1,6 +1,6 @@
 # Candidate Messaging Assistant
 
-> **Status: Steps 1-2 complete (scaffolding, data layer, read-only tools).** The backend has validated fixtures, SQLite run/step persistence and three tools, all covered by tests. There is no agent loop, LLM, approval workflow or UI yet. Unticked items under "Planned features" are plans, not working software.
+> **Status: Steps 1-3 complete (scaffolding, data layer and tools, FakeLLM and agent loop).** The backend can run the agent against the fixtures and persist a draft run with its steps, but there is no HTTP endpoint for it, no approval workflow and no UI yet. Verified by tests only, not through the API. Unticked items under "Planned features" are plans, not working software.
 
 ## Objective
 
@@ -18,12 +18,12 @@ Progress is tracked here. A box is ticked only after the item is implemented and
 - [x] Agent tools: `get_candidate`, `get_interview_status`, `get_job` (tools only; the agent loop that calls them is not built)
 - [x] Persistence for agent runs and steps (SQLite repository; the run lifecycle and agent loop are not built)
 - [x] Pydantic models and validated JSON fixtures (4 candidates, 3 jobs, 4 conversations)
-- [ ] Persisted multi-step agent run (steps, status, draft)
+- [x] Persisted multi-step agent run (steps, status, draft): `run_agent` with `FakeLLM`, max 6 LLM calls, runs end `awaiting_approval` or `failed` (not yet reachable over HTTP)
 - [ ] Approve (optionally edited) or reject (reason required)
 - [ ] Injected tool failure with graceful degradation
 - [ ] Execution history and trace view
 - [ ] Structured JSON logging with run ids
-- [ ] Tests: unit, data validation, integration, API, frontend, browser E2E (done so far: unit, data validation, integration for the data layer and tools)
+- [ ] Tests: unit, data validation, integration, API, frontend, browser E2E (done so far: unit, data validation, integration for the data layer, tools and agent loop)
 - [ ] Automated AI evaluation harness with pass threshold
 - [ ] GitHub Actions CI
 - [ ] Optional OpenAI client (not required to run anything)

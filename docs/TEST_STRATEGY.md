@@ -1,6 +1,6 @@
 # Test Strategy
 
-> **Status: partly implemented.** Tests exist for the health route and the Step 2 data layer and tools. Other layers are still planned. Results are recorded only after they are actually run.
+> **Status: partly implemented.** Tests exist for the health route, the Step 2 data layer and tools, and the Step 3 FakeLLM and agent loop. Other layers are still planned. Results are recorded only after they are actually run.
 
 ## Principles
 
@@ -41,3 +41,4 @@ Limitation: evals against the fake validate the pipeline, not model quality. Thi
 
 - Step 1: `pytest` 1 passed; Vitest 1 passed.
 - Step 2: `cd backend && .venv/bin/python -m pytest` gave 41 passed (models, fixture validation, tools, SQLite repository, tools + repository integration); `ruff check .` clean.
+- Step 3: `.venv/bin/python -m pytest` gave 65 passed in total (24 new: FakeLLM policy and script mode, loop error handling, retry, max steps, LLM failure, plus integration runs over all four fixture conversations); `ruff check .` clean.

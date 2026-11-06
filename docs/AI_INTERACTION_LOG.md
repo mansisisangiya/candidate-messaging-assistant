@@ -40,4 +40,17 @@ Note: the session switched models between entries 1 and 2 (Opus 5.5 for planning
 - Injected failure not implemented; only the `ToolUnavailableError` class exists.
 **Outcome:** Verified by running: 41 backend tests passed, ruff clean. Pending the user's review.
 
+## 5. Step 3: FakeLLM and agent loop
+**Model:** Sonnet 5.5
+**Prompt (summary):** Define a clean LLM interface, a FakeLLM, and a hand-written agent loop (max 6 steps) that calls the three tools with validated arguments, persists runs and steps in SQLite, and handles tool failures and invalid LLM responses. Unit and integration tests with deterministic responses. No approval or frontend work.
+**AI output:** `llm/base.py`, `llm/fake.py`, `agent/prompt.py`, `agent/loop.py`, two new error classes, three test files, docs updates.
+**Decisions and changes:**
+- FakeLLM has two modes (fixed policy, and a scripted mode for tests) instead of separate test doubles.
+- "6 steps" is implemented as 6 LLM calls; a response may contain several tool calls.
+- Tool errors go back to the LLM as tool results; only `ToolUnavailableError` is retried.
+- A catch-all handler marks the run `failed` so no run stays `running`; the stored message hides internal details.
+- Draft guardrails were not requested and are not implemented. Run status is set directly, not through a state machine.
+- Ruff removed an unneeded `noqa` and one leftover no-op line was deleted from the loop after review.
+**Outcome:** Verified by running: 65 backend tests passed, ruff clean. Pending the user's review.
+
 <!-- Add new entries below. Format: number, title, prompt summary, AI output, outcome (accepted / modified / rejected, and why). -->
