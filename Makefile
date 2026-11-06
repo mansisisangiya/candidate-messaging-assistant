@@ -1,4 +1,4 @@
-.PHONY: install install-backend install-frontend backend frontend test test-backend test-frontend lint build
+.PHONY: install install-backend install-frontend backend frontend test test-backend test-frontend lint build eval
 
 BACKEND_PY = backend/.venv/bin
 
@@ -24,6 +24,9 @@ test-backend:
 
 test-frontend:
 	cd frontend && npm test
+
+eval:
+	cd backend && .venv/bin/python -m evals.run
 
 lint:
 	cd backend && .venv/bin/ruff check .

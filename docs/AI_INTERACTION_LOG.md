@@ -84,6 +84,28 @@ Note: the session switched models between entries 1 and 2 (Opus 5.5 for planning
 - Replaced the weak "does not invent compensation" test, which only checked that the default FakeLLM does not say "salary", with a scripted LLM that does say it and must fail the run. The old assertion is kept as a separate, honestly named test.
 - My first approval API test used a 2-character rejection reason and got 422 instead of 409; the test was wrong, not the code, so I changed the test.
 - Ruff asked for the `pydantic` import in `models.py` to be reformatted; applied.
-**Outcome:** Verified by running: 188 backend tests passed, ruff clean, and a real `curl` against uvicorn with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya`: two error steps, no date in the draft, `awaiting_approval`; `conv_tom` unaffected; approve edited 200; second approve 409; reject after approve 409; short reason 422; unknown run 404. Pending the user's review.
+**Outcome:** Verified by running: 188 backend tests passed, ruff clean, and a real `curl` against uvicorn with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya`: two error steps, no date in the draft, `awaiting_approval`; `conv_tom` unaffected; approve edited 200; second approve 409; reject after approve 409; short reason 422; unknown run 404. Accepted and committed as `26728f2`.
+
+## 8. Step 7: eval harness and JSON logging
+**Model:** Sonnet 5.5
+**Prompt (summary):** A YAML-driven eval harness with 8-10 meaningful cases, a pass threshold and non-zero exit, a pytest wrapper, `make eval` and a CI step; stdlib JSON logging with a `run_id` context variable, logging of runs, tool errors, guardrails and transitions, and no PII. No markdown report, live-eval workflow or frontend.
+**AI output:** `app/logging_config.py`, `evals/{cases.yaml,run.py}`, `tests/evals/test_evals.py`, `tests/unit/test_logging.py`, logging calls in the loop and `transition()`, a `LOG_LEVEL` Literal, a Makefile target, a CI step.
+**Decisions and changes:**
+- Added `pyyaml` to `requirements.txt` because the cases are YAML; it is the only new dependency (logging uses the stdlib only).
+- `bind_run_id` is a context manager (set, then reset in `finally`) instead of bare `set`/`reset` calls, and `transition()` uses it too so approve/reject logs carry the run id. `run_agent` does not set it by hand beyond that.
+- The harness builds the service through `api.deps.get_drafting_service` with a `Settings` from the case's env, so the case that injects the failure exercises the real wiring, not a test-only path.
+- The harness caught a mistake in my own first draft of a case: I asserted a rejected draft's text was absent from the whole run, but the `llm_message` step keeps it on purpose for debugging. I replaced that check with a new `has_draft` check (the draft is not stored). This was the first real failure the harness reported (9/10, which still passed at the then-default 0.9 threshold; that default is now 1.0, see entry 9).
+- Showing the harness can fail: a copy of the cases with two wrong expectations gave 8/10 = 80% and exit 1; tests also break the guardrail and the failure injection on purpose and expect the eval to fail.
+- The caplog test needs `RunIdFilter` installed on caplog's handler, because the filter lives on our handler; other logging tests parse the JSON that `configure_logging` writes.
+- I suppress logging during the eval run (restored afterwards) so the report stays readable.
+**Outcome:** Verified by running: 216 backend tests passed (after the entry 9 fixes; 213 before), ruff clean, `make eval` 10/10, and a real uvicorn run whose stderr was JSON lines with `run_id` on loop and transition logs. Pending the user's review.
+
+## 9. Step 7 review fixes: hermetic eval, threshold 1.0
+**Reviewer finding:** with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya` set in the shell, the eval dropped to 8/10 and exited 1, because `Settings(**case.env)` still read the environment and `backend/.env`. The same could happen for a developer with a copied `.env.example`, or in CI. I reproduced it first with new tests (env var, `.env` file in the working directory, default threshold), which failed before the fix.
+**Changes:**
+- Settings for each case are built with `_env_file=None` and `inject_interview_failure_for=""` as the base, then only the case's own overrides (merged in a dict; my first version passed the keyword twice and crashed for the outage case, caught by running it). Init values beat environment variables, so every case starts from known defaults.
+- Default threshold changed from 0.9 to 1.0. My earlier note that I "kept your default" was not a rationale: with a deterministic fake and 10 cases, 0.9 lets one real regression through with exit 0. A live-model run would use a lower threshold such as 0.8 (not built).
+- Correction: my Step 7 report said the real `make eval` output was in the README, but the block was empty (my capture command used a `sed` pattern that does not work on macOS). It is now filled from an actual run.
+**Outcome:** see the Step 7 results in TEST_STRATEGY.md. Pending the user's review.
 
 <!-- Add new entries below. Format: number, title, prompt summary, AI output, outcome (accepted / modified / rejected, and why). -->

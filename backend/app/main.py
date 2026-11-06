@@ -4,10 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.errors import register_exception_handlers
 from app.api.routes import router
 from app.config import get_settings
+from app.logging_config import configure_logging
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging(settings.log_level)
     app = FastAPI(title="Candidate Messaging Assistant")
     app.add_middleware(
         CORSMiddleware,

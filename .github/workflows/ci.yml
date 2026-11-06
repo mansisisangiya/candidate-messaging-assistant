@@ -20,6 +20,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: pytest
+      - run: python -m evals.run  # FakeLLM eval cases; fails below the default 1.0 pass rate (FakeLLM is deterministic)
 
   frontend:
     runs-on: ubuntu-latest

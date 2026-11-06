@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: partly implemented.** Built (Steps 1-6): config and health route (1); models, fixtures and store (2); SQLite repository and tool registry (3); `LLMClient`, `FakeLLM` and agent loop (4); state machine, drafting service, read/draft API and error envelope (5); injected failure, guardrails and approve/reject (6). Still planned: JSON logging config, UI, OpenAI client, evals.
+> **Status: partly implemented.** Built (Steps 1-6): config and health route (1); models, fixtures and store (2); SQLite repository and tool registry (3); `LLMClient`, `FakeLLM` and agent loop (4); state machine, drafting service, read/draft API and error envelope (5); injected failure, guardrails and approve/reject (6); Eval harness and JSON logging (7). Still planned: UI, OpenAI client.
 
 ## Layers
 
@@ -130,12 +130,19 @@ Steps are persisted as they happen, so failed runs still have a trace.
 - `services/approval.py` `ApprovalService`: `approve(run_id, edited_text=None)` sets `final_text` to the edit (stripped) or the draft; `reject(run_id, reason)` sets `rejection_reason`. Both only call `transition()`; the service has no status checks of its own, so double approve, approve after reject and approving a failed run all produce `InvalidTransition` (409). Request models strip text first, so a whitespace-only edit or reason is a 422.
 - Routes `POST /api/runs/{id}/approve` (optional body) and `/reject` (body required) are thin and return the updated `AgentRun`.
 
+## Eval harness and logging as built (Step 7)
+
+- `evals/cases.yaml`: 10 cases (scheduled / not scheduled / pending feedback / completed, salary question, a scripted model inventing a salary, salary allowed by instructions, interview outage, tool scoping, trace shape). Each names a conversation, optional instructions, optional `env` (for example `INJECT_INTERVIEW_FAILURE_FOR`), an optional scripted LLM, and checks. Expected values are written in the YAML, not read from the fixtures, so the cases are an independent oracle.
+- `evals/run.py`: builds the service with `api.deps.get_drafting_service` and a `Settings` built hermetically (`_env_file=None`, `inject_interview_failure_for=""`, then only the case's own `env`), so a developer's environment variables or `.env` cannot change results while the API's wiring is still exercised. Check types, one function each: `status`, `contains`, `not_contains`, `max_length`, `step_types` (also asserts indexes 0..n-1), `error_steps`, `has_draft`. A case passes only if all its checks pass. The pass rate is passed/total; exit code 1 if it is below `--threshold`, default 1.0. Why: `FakeLLM` has no randomness, so a failing case is a real regression, and a lower default (0.9 of 10 cases) would let one through with exit 0. A future live-model run is non-deterministic and would use a lower value such as 0.8. A case that raises counts as failed.
+- Logging: `app/logging_config.py` has a JSON formatter, a filter that adds `run_id` from the `run_id_var` context variable, and `configure_logging(level)` (called once in `create_app()`, idempotent). `bind_run_id(run_id)` sets the variable and resets it in `finally`; `run_agent` and `transition()` use it (so approve/reject transitions are tagged too). Logged: run started / completed (status, `duration_ms`) / failed, tool errors and retries (tool name and error code only), guardrail violations, and every state transition or rejected transition (from, to). Rule: log ids, codes, counts and durations, never emails or message text; a test scans the logs for both.
+- Trade-offs: a context variable (not a parameter) keeps log calls free of plumbing; threads in FastAPI each get their own context, which suits synchronous runs. A failed run's `error` text is logged, so it must stay free of PII (it holds generic guardrail or LLM error messages).
+
 ## Planned repo layout
 
 ```
-backend/app/{main.py, config.py, logging.py, models.py, api/, services/, agent/, llm/, db/, data/fixtures/}
+backend/app/{main.py, config.py, logging_config.py, models.py, api/, services/, agent/, llm/, db/, data/fixtures/}
 backend/tests/{unit/, integration/, api/}
-backend/evals/{cases.yaml, run.py}
+backend/evals/{cases.yaml, run.py}   (built)
 frontend/src/{api.ts, types.ts, App.tsx, components/}   frontend/e2e/
 .github/workflows/{ci.yml, eval-live.yml}
 ```

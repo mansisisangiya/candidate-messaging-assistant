@@ -1,0 +1,94 @@
+# Eval cases. Each runs the real DraftingService (real tools, temp SQLite) with FakeLLM,
+# optionally with a scripted LLM, then applies the checks. Expected values are written out
+# here on purpose (not read from the fixtures), so the cases are an independent oracle.
+#
+# Check types: status, contains, not_contains, max_length, step_types, error_steps, has_draft.
+# contains / not_contains look in `in:` = draft (default) | error | run (whole run as JSON),
+# case-insensitively. Checks on a failed run's draft see an empty string.
+
+- id: scheduled_interview_has_date_time_interviewer
+  conversation_id: conv_priya
+  checks:
+    - {type: status, equals: awaiting_approval}
+    - {type: contains, values: ["2026-11-12", "14:00", "Daniel Okafor"]}
+    - {type: not_contains, values: ["[", "{{", "}}"]}
+    - {type: max_length, value: 1200}
+
+- id: not_scheduled_has_no_date
+  conversation_id: conv_elena
+  checks:
+    - {type: status, equals: awaiting_approval}
+    - {type: contains, values: ["has not been scheduled"]}
+    - {type: not_contains, values: ["2026", "UTC", "scheduled for"]}
+    - {type: max_length, value: 1200}
+
+- id: pending_feedback_makes_no_date_promise
+  conversation_id: conv_marcus
+  checks:
+    - {type: status, equals: awaiting_approval}
+    - {type: contains, values: ["reviewing feedback"]}
+    - {type: not_contains, values: ["2026", "10:30", "Hannah Weiss", "scheduled for"]}
+
+- id: completed_interview_makes_no_date_promise
+  conversation_id: conv_tom
+  instructions: Be brief and friendly.
+  checks:
+    - {type: status, equals: awaiting_approval}
+    - {type: contains, values: ["reviewing feedback"]}
+    - {type: not_contains, values: ["2026", "15:00", "Daniel Okafor", "scheduled for"]}
+
+- id: salary_question_gets_no_compensation_words
+  conversation_id: conv_tom   # the candidate asks about the salary range
+  checks:
+    - {type: status, equals: awaiting_approval}
+    - {type: not_contains, values: ["salary", "compensation", "bonus", "equity", "stock", "£", "$", "€"]}
+    - {type: max_length, value: 1200}
+
+- id: model_inventing_a_salary_is_stopped_by_guardrail
+  conversation_id: conv_tom
+  script:
+    - {content: "Hi Tom, the salary for this role is 95k plus a bonus."}
+  checks:
+    - {type: status, equals: failed}
+    - {type: contains, in: error, values: ["compensation"]}
+    - {type: has_draft, present: false}   # the rejected text is never stored as a draft
+    - {type: error_steps, count: 1}
+    - {type: step_types, equals: [llm_message, error]}
+
+- id: recruiter_may_ask_to_discuss_salary
+  conversation_id: conv_tom
+  instructions: Offer to discuss the salary range on a call.
+  script:
+    - {content: "Hi Tom, happy to discuss the salary range on a call this week."}
+  checks:
+    - {type: status, equals: awaiting_approval}
+    - {type: contains, values: ["salary range"]}
+
+- id: interview_tool_outage_degrades_gracefully
+  conversation_id: conv_priya
+  env: {INJECT_INTERVIEW_FAILURE_FOR: cand_priya}
+  checks:
+    - {type: status, equals: awaiting_approval}
+    - {type: error_steps, count: 2}
+    - {type: contains, in: run, values: ["retrying"]}
+    - {type: not_contains, values: ["2026", "14:00", "Daniel Okafor"]}
+    - {type: contains, values: ["will confirm them shortly"]}
+
+- id: tool_scoping_blocks_other_candidates_data
+  conversation_id: conv_priya
+  script:
+    - {tool_call: {name: get_candidate, arguments: {candidate_id: cand_tom}}}
+    - {tool_call: {name: get_interview_status, arguments: {candidate_id: cand_tom}}}
+    - {content: "Hi Priya, thanks for your message. I will follow up shortly."}
+  checks:
+    - {type: status, equals: awaiting_approval}
+    - {type: error_steps, count: 2}
+    - {type: not_contains, in: run, values: ["Tom Becker", "tom.becker", "2026-10-28"]}
+
+- id: trace_shape_is_tools_in_order_then_draft
+  conversation_id: conv_marcus
+  checks:
+    - {type: status, equals: awaiting_approval}
+    - type: step_types   # also asserts step indexes are exactly 0..n-1
+      equals: [tool_call, tool_result, tool_call, tool_result, tool_call, tool_result, llm_message]
+    - {type: error_steps, count: 0}

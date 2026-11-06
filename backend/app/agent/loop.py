@@ -21,6 +21,7 @@ from app.errors import (
     TooManyToolCallsError,
 )
 from app.llm.base import ChatMessage, LLMClient, ToolCall
+from app.logging_config import bind_run_id
 from app.models import AgentRun, AgentStep, Conversation, RunStatus, StepType
 from app.services.run_state import transition
 
@@ -57,19 +58,22 @@ def run_agent(
     instructions: str | None = None,
 ) -> AgentRun:
     run = repo.create_run(conversation.id, instructions)
-    log = {"run_id": run.id}
-    logger.info("run started", extra=log)
-    try:
-        draft = _loop(llm, tools, _Recorder(repo, run.id),
-                      build_messages(conversation, instructions), instructions)
-    except Exception as exc:
-        message = exc.message if isinstance(exc, AppError) else "Unexpected internal error"
-        if not isinstance(exc, AppError):
-            logger.exception("run crashed", extra=log)
-        logger.warning("run failed: %s", message, extra=log)
-        return transition(repo, run.id, RunStatus.FAILED, error=message)
-    logger.info("run awaiting approval", extra=log)
-    return transition(repo, run.id, RunStatus.AWAITING_APPROVAL, draft_text=draft)
+    with bind_run_id(run.id):  # every log line inside carries run_id
+        started = time.perf_counter()
+        logger.info("run started", extra={"conversation_id": conversation.id})
+        try:
+            draft = _loop(llm, tools, _Recorder(repo, run.id),
+                          build_messages(conversation, instructions), instructions)
+        except Exception as exc:
+            message = exc.message if isinstance(exc, AppError) else "Unexpected internal error"
+            if not isinstance(exc, AppError):
+                logger.exception("run crashed")
+            logger.warning("run failed", extra={"error": message,
+                                                "duration_ms": _elapsed_ms(started)})
+            return transition(repo, run.id, RunStatus.FAILED, error=message)
+        logger.info("run completed", extra={"status": RunStatus.AWAITING_APPROVAL,
+                                            "duration_ms": _elapsed_ms(started)})
+        return transition(repo, run.id, RunStatus.AWAITING_APPROVAL, draft_text=draft)
 
 
 def _loop(llm: LLMClient, tools: ToolExecutor, recorder: _Recorder,
@@ -101,6 +105,7 @@ def _enforce_guardrails(recorder: _Recorder, draft: str, instructions: str | Non
     violations = validate_draft(draft, instructions)
     if violations:
         message = "; ".join(violations)
+        logger.warning("guardrail violation", extra={"violations": violations})
         recorder.record(StepType.ERROR, error=f"{GuardrailViolationError.code}: {message}")
         raise GuardrailViolationError(message)
 
@@ -119,8 +124,9 @@ def _run_tool(tools: ToolExecutor, recorder: _Recorder, call: ToolCall) -> ChatM
         if isinstance(exc, AppError):
             code, message = exc.code, exc.message
         else:
-            logger.exception("tool crashed: %s", call.name, extra={"run_id": recorder.run_id})
+            logger.exception("tool crashed", extra={"tool": call.name})
             code, message = "tool_failed", "The tool failed unexpectedly"
+        logger.warning("tool error", extra={"tool": call.name, "error_code": code})
         recorder.record(StepType.ERROR, _elapsed_ms(started), name=call.name,
                         error=f"{code}: {message}")
         payload: dict[str, Any] = {"error": {"code": code, "message": message}}
@@ -136,6 +142,7 @@ def _execute_with_retry(tools: ToolExecutor, recorder: _Recorder, call: ToolCall
     try:
         return tools.execute(call.name, call.arguments)
     except ToolUnavailableError as exc:
+        logger.warning("tool unavailable, retrying", extra={"tool": call.name})
         recorder.record(StepType.ERROR, name=call.name,
                         error=f"{exc.code}: {exc.message}, retrying")
         return tools.execute(call.name, call.arguments)

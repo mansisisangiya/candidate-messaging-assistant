@@ -1,6 +1,6 @@
 # Candidate Messaging Assistant
 
-> **Status: Steps 1-6 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject).** The whole backend flow works over HTTP: list conversations, create a draft (the agent runs synchronously with `FakeLLM`), read the steps, approve or reject. There is no UI, JSON logging config or eval harness yet. Unticked items under "Planned features" are plans, not working software.
+> **Status: Steps 1-7 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject, 7 eval harness and JSON logging).** The whole backend flow works over HTTP: list conversations, create a draft (the agent runs synchronously with `FakeLLM`), read the steps, approve or reject. There is no UI yet. Unticked items under "Planned features" are plans, not working software.
 
 ## Objective
 
@@ -26,10 +26,10 @@ Progress is tracked here. A box is ticked only after the item is implemented and
 - [x] Injected tool failure with graceful degradation (backend: `INJECT_INTERVIEW_FAILURE_FOR=cand_priya`; verified with tests and a real `curl`; the UI warning is not built)
 - [x] Draft guardrails (non-empty, max 1200 characters, no placeholders, no compensation talk unless the recruiter asked); a violation fails the run and the draft is not stored
 - [ ] Execution history and trace view
-- [ ] Structured JSON logging with run ids
-- [ ] Tests: unit, data validation, integration, API, frontend, browser E2E (done so far: unit, data validation, integration and API tests; no frontend, E2E or eval tests yet)
-- [ ] Automated AI evaluation harness with pass threshold
-- [ ] GitHub Actions CI
+- [x] Structured JSON logging with run ids (stdlib, `run_id` via a context variable; checked in tests and in the output of a real uvicorn run)
+- [ ] Tests: unit, data validation, integration, API, frontend, browser E2E (done so far: unit, data validation, integration, API and eval-harness tests; no frontend component or browser E2E tests yet)
+- [x] Automated AI evaluation harness with pass threshold (`make eval`: 10 cases, default threshold 1.0; runs against `FakeLLM`, so it checks the pipeline, not model quality)
+- [ ] GitHub Actions CI (workflow written and now includes the eval step; it has never run on GitHub)
 - [ ] Optional OpenAI client (not required to run anything)
 
 ## Technology
@@ -92,8 +92,32 @@ Tests and checks:
 make test           # backend (pytest) + frontend (Vitest)
 make test-backend
 make test-frontend
+make eval           # AI eval cases against FakeLLM; exits non-zero below the pass threshold
 make lint           # ruff + tsc
 make build          # frontend production build
 ```
+
+The eval ignores your environment and `backend/.env`, so turning on the demo flag (`INJECT_INTERVIEW_FAILURE_FOR`) does not affect it.
+
+Eval output (real, `make eval`; `python -m evals.run --threshold 0.8` changes the threshold, `--cases` selects another file):
+
+```
+PASS  scheduled_interview_has_date_time_interviewer
+PASS  not_scheduled_has_no_date
+PASS  pending_feedback_makes_no_date_promise
+PASS  completed_interview_makes_no_date_promise
+PASS  salary_question_gets_no_compensation_words
+PASS  model_inventing_a_salary_is_stopped_by_guardrail
+PASS  recruiter_may_ask_to_discuss_salary
+PASS  interview_tool_outage_degrades_gracefully
+PASS  tool_scoping_blocks_other_candidates_data
+PASS  trace_shape_is_tools_in_order_then_draft
+
+Pass rate: 10/10 = 100% (threshold 100%) -> PASSED
+```
+
+The eval cases run the real drafting service, tools, SQLite and guardrails with `FakeLLM` (some with a scripted response). They prove the pipeline behaves (no date promises when none is known, no compensation talk, no cross-candidate data, graceful degradation, trace shape). They say nothing about the quality of a real model's writing.
+
+Logs are JSON lines on stderr with `timestamp`, `level`, `logger`, `message`, `run_id` (while a run is being processed) and extras such as `duration_ms`, `tool`, `from_status`, `to_status`. They never contain candidate emails or message text. `LOG_LEVEL` is one of DEBUG, INFO, WARNING, ERROR, CRITICAL. uvicorn's own access lines keep its default format.
 
 Configuration is via environment variables; see `.env.example` (copy to `backend/.env` if you want overrides). All values are optional.
