@@ -1,12 +1,50 @@
 # Candidate Messaging Assistant
 
-> **Status: Steps 1-9 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject, 7 eval harness and JSON logging, 8 minimal frontend and Playwright E2E, 9 cleanup, eval criteria and documentation).** The full flow (list conversations, draft with `FakeLLM`, read the trace, approve or reject) works in the API and in a deliberately plain UI (no UI library, router or state library). Verified by backend and frontend tests and two Playwright tests; CI has not run on GitHub yet. Unticked items in the checklist are not done.
-
 ## Objective
 
 An AI-powered assistant that helps a recruiter respond to candidates. A recruiter opens a conversation, asks an AI agent to draft a reply, reviews the draft and the steps the agent took, then approves or rejects it. Approved drafts are marked "ready to send". Nothing is actually sent.
 
 Built as an engineering assessment to demonstrate: an agent that calls tools, state across steps, a backend API with a simple frontend, human approval, error handling with an injected failure, a layered test suite, an AI evaluation harness, logging and execution history, CI, and documentation.
+
+> **Status: Steps 1-9 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject, 7 eval harness and JSON logging, 8 minimal frontend and Playwright E2E, 9 cleanup, eval criteria and documentation).** The full flow (list conversations, draft with `FakeLLM`, read the trace, approve or reject) works in the API and in a deliberately plain UI (no UI library, router or state library). Verified by backend and frontend tests and two Playwright tests; CI has not run on GitHub yet. Unticked items in the checklist are not done.
+
+Known limitations and the auth decision are listed under Limitations and Authentication below.
+
+## Demo
+
+![Draft panel with trace](docs/screenshots/draft-panel.png)
+
+## Quick start
+
+Requirements: Python 3.12, Node.js 22.12+ (developed on Node 24), `make`. No OpenAI key is needed.
+
+```bash
+make install        # creates backend/.venv, installs backend and frontend dependencies
+```
+
+Run (two terminals):
+
+```bash
+make backend        # FastAPI on http://localhost:8000
+```
+
+```bash
+make frontend       # Vite on http://localhost:5173 (proxies /api to :8000)
+```
+
+The UI at http://localhost:5173 lists the seeded conversations. Select one, optionally add instructions, click **Draft reply**, read the trace, then edit/approve or reject.
+
+Check the backend: `curl http://localhost:8000/api/health` returns `{"status":"ok","llm_provider":"fake"}`.
+
+Tests and evals (details under [Testing and evals](#testing-and-evals)):
+
+```bash
+make test           # backend (pytest) + frontend (Vitest)
+make eval           # AI eval cases against FakeLLM; exits non-zero below the pass threshold
+make e2e            # Playwright (needs `cd frontend && npx playwright install chromium` once)
+```
+
+For `make e2e`, run `make install` first (the config starts the backend with `backend/.venv/bin/python`; set `E2E_PYTHON=/path/to/python` to use another interpreter), and once run `cd frontend && npx playwright install chromium`. The E2E code is type-checked by `make lint` (`tsconfig.e2e.json`).
 
 ## Feature checklist
 
@@ -37,10 +75,6 @@ Progress is tracked here. A box is ticked only after the item is implemented and
 
 Python 3.12, FastAPI, Pydantic, SQLite, React + TypeScript (Vite), pytest, Vitest, Playwright, GitHub Actions. The default LLM is a deterministic `FakeLLM`, so no API key or network is needed.
 
-## Out of scope
-
-Authentication, actually sending messages, streaming, background job queues, multi-user support, agent frameworks (LangChain etc.), vector databases.
-
 ## Design decisions and assumptions
 
 - **`FakeLLM` is the default.** The agent depends on a small `LLMClient` protocol, so tests, CI and the demo are deterministic and need no key. The consequence is that nothing here measures real model quality.
@@ -52,73 +86,7 @@ Authentication, actually sending messages, streaming, background job queues, mul
 - **Graceful degradation.** A failing tool is retried once and recorded; the draft then avoids relying on the missing data. The UI warns when a run has error steps.
 - **Guardrails** (non-empty, at most 1200 characters, no placeholders, no compensation talk unless the recruiter asked) fail the run, and the rejected text is never stored as a draft.
 
-## Authentication and authorization
-
-There is no login, by design: it is out of scope for the timebox. The access control that does exist is at the data level:
-
-- tools can only read the conversation's own candidate, enforced in code and covered by unit, integration and eval tests (including a prompt-injection case);
-- approve and reject are only allowed from the right state (`awaiting_approval`); anything else returns 409.
-
-A real deployment would add authentication and per-recruiter authorization on conversations and runs (who may view, draft, approve or reject), and would record who approved. None of that is built.
-
-## Limitations
-
-- `FakeLLM` writes template text: the evals and tests prove the pipeline, not model quality.
-- Runs are synchronous; SQLite is single-node.
-- The UI shows only the latest run of a conversation (earlier runs are available through `GET /api/runs`).
-- Guardrails are regex and keyword checks (a paraphrased salary mention would get through); the relevance eval is a keyword proxy.
-- No authentication or authorization (see above).
-- If the write to the `failed` state itself fails, the run stays in `running`.
-- CI is written but has not run on GitHub yet; no deploy, smoke-test, nightly or live-eval workflow exists.
-
-## Next steps (what I would add with more time)
-
-- An OpenAI client behind the existing protocol, plus a scheduled live-eval workflow with `--repeat` and a lower threshold, with results stored to track regressions.
-- A run-history view in the UI.
-- Redraft automatically after a guardrail violation.
-- TypeScript types generated from the OpenAPI schema instead of kept in sync by hand.
-- Authentication and per-recruiter authorization.
-- Background jobs for long runs.
-- Contract tests, visual regression tests and a load test.
-
-## Reports and screenshot
-
-- [docs/reports/test-report.md](docs/reports/test-report.md): real output of the test, lint, build, eval and E2E commands.
-- [docs/reports/eval-report.md](docs/reports/eval-report.md): the eval results per criterion, including a repeated run.
-- Screenshot: [docs/screenshots/draft-panel.png](docs/screenshots/draft-panel.png) (draft panel with the trace).
-
-## Documentation
-
-- [CLAUDE.md](CLAUDE.md): conventions and constraints for AI-assisted development
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): architecture, API, agent workflow
-- [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): testing approach
-- [docs/AI_INTERACTION_LOG.md](docs/AI_INTERACTION_LOG.md): record of AI interactions
-
-## Setup and usage
-
-Requirements: Python 3.12, Node.js 22.12+ (developed on Node 24), `make`. No OpenAI key is needed.
-
-```bash
-make install        # creates backend/.venv, installs backend and frontend dependencies
-```
-
-Run (two terminals):
-
-```bash
-make backend        # FastAPI on http://localhost:8000
-```
-
-```bash
-make frontend       # Vite on http://localhost:5173 (proxies /api to :8000)
-```
-
-The UI at http://localhost:5173 lists the seeded conversations. Select one, optionally add instructions, click **Draft reply**, read the trace, then edit/approve or reject.
-
-![Draft panel with trace](docs/screenshots/draft-panel.png)
-
-**E2E tests.** `make e2e` runs two Playwright tests in Chromium. The config starts its own backends (temporary SQLite files, `LLM_PROVIDER=fake`) and Vite servers on ports 8100/5174 and 8101/5175, so it never touches `backend/data/` or servers you have running. The first test selects Priya, drafts, checks the trace, approves and sees "approved". The second runs against a backend started with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya` and checks the warning banner and the two error steps. On failure it keeps a screenshot and trace in `frontend/test-results/`. Prerequisites: run `make install` first (the config starts the backend with `backend/.venv/bin/python`; set `E2E_PYTHON=/path/to/python` to use another interpreter), and once run `cd frontend && npx playwright install chromium`. The E2E code is type-checked by `make lint` (`tsconfig.e2e.json`).
-
-Check the backend: `curl http://localhost:8000/api/health` returns `{"status":"ok","llm_provider":"fake"}`.
+## API usage and demos
 
 Try the API (run state is stored in `backend/data/app.db`, git-ignored):
 
@@ -139,14 +107,19 @@ A run that is already approved, rejected or failed cannot be decided again: the 
 
 Errors always look like `{"error": {"code": "...", "message": "..."}}`. A run that fails (for example the LLM errors) is still returned with `201` and `"status": "failed"`.
 
-Tests and checks:
+Logs are JSON lines on stderr with `timestamp`, `level`, `logger`, `message`, `run_id` (while a run is being processed) and extras such as `duration_ms`, `tool`, `from_status`, `to_status`. They never contain candidate emails or message text. `LOG_LEVEL` is one of DEBUG, INFO, WARNING, ERROR, CRITICAL. uvicorn's own access lines keep its default format.
+
+Configuration is via environment variables; see `.env.example` (copy to `backend/.env` if you want overrides). All values are optional.
+
+## Testing and evals
+
+**E2E tests.** `make e2e` runs two Playwright tests in Chromium. The config starts its own backends (temporary SQLite files, `LLM_PROVIDER=fake`) and Vite servers on ports 8100/5174 and 8101/5175, so it never touches `backend/data/` or servers you have running. The first test selects Priya, drafts, checks the trace, approves and sees "approved". The second runs against a backend started with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya` and checks the warning banner and the two error steps. On failure it keeps a screenshot and trace in `frontend/test-results/`.
+
+Tests and checks (`make test`, `make eval` and `make e2e` are in the [Quick start](#quick-start)):
 
 ```bash
-make test           # backend (pytest) + frontend (Vitest)
 make test-backend
 make test-frontend
-make eval           # AI eval cases against FakeLLM; exits non-zero below the pass threshold
-make e2e            # Playwright (needs `cd frontend && npx playwright install chromium` once)
 make lint           # ruff + tsc
 make build          # frontend production build
 ```
@@ -184,6 +157,48 @@ Pass rate: 14/14 = 100% (threshold 100%) -> PASSED
 
 The eval cases run the real drafting service, tools, SQLite and guardrails with `FakeLLM` (some with a scripted response). They prove the pipeline behaves (no date promises when none is known, no compensation talk, no cross-candidate data, graceful degradation, trace shape). They say nothing about the quality of a real model's writing.
 
-Logs are JSON lines on stderr with `timestamp`, `level`, `logger`, `message`, `run_id` (while a run is being processed) and extras such as `duration_ms`, `tool`, `from_status`, `to_status`. They never contain candidate emails or message text. `LOG_LEVEL` is one of DEBUG, INFO, WARNING, ERROR, CRITICAL. uvicorn's own access lines keep its default format.
+### Reports and screenshot
 
-Configuration is via environment variables; see `.env.example` (copy to `backend/.env` if you want overrides). All values are optional.
+- [docs/reports/test-report.md](docs/reports/test-report.md): real output of the test, lint, build, eval and E2E commands.
+- [docs/reports/eval-report.md](docs/reports/eval-report.md): the eval results per criterion, including a repeated run.
+- Screenshot: [docs/screenshots/draft-panel.png](docs/screenshots/draft-panel.png) (draft panel with the trace).
+
+## Authentication and authorization
+
+There is no login, by design: it is out of scope for the timebox. The access control that does exist is at the data level:
+
+- tools can only read the conversation's own candidate, enforced in code and covered by unit, integration and eval tests (including a prompt-injection case);
+- approve and reject are only allowed from the right state (`awaiting_approval`); anything else returns 409.
+
+A real deployment would add authentication and per-recruiter authorization on conversations and runs (who may view, draft, approve or reject), and would record who approved. None of that is built.
+
+## Limitations
+
+- `FakeLLM` writes template text: the evals and tests prove the pipeline, not model quality.
+- Runs are synchronous; SQLite is single-node.
+- The UI shows only the latest run of a conversation (earlier runs are available through `GET /api/runs`).
+- Guardrails are regex and keyword checks (a paraphrased salary mention would get through); the relevance eval is a keyword proxy.
+- No authentication or authorization (see above).
+- If the write to the `failed` state itself fails, the run stays in `running`.
+- CI is written but has not run on GitHub yet; no deploy, smoke-test, nightly or live-eval workflow exists.
+
+## Out of scope
+
+Authentication, actually sending messages, streaming, background job queues, multi-user support, agent frameworks (LangChain etc.), vector databases.
+
+## Next steps (what I would add with more time)
+
+- An OpenAI client behind the existing protocol, plus a scheduled live-eval workflow with `--repeat` and a lower threshold, with results stored to track regressions.
+- A run-history view in the UI.
+- Redraft automatically after a guardrail violation.
+- TypeScript types generated from the OpenAPI schema instead of kept in sync by hand.
+- Authentication and per-recruiter authorization.
+- Background jobs for long runs.
+- Contract tests, visual regression tests and a load test.
+
+## Documentation
+
+- [CLAUDE.md](CLAUDE.md): conventions and constraints for AI-assisted development
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): architecture, API, agent workflow
+- [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): testing approach
+- [docs/AI_INTERACTION_LOG.md](docs/AI_INTERACTION_LOG.md): record of AI interactions
