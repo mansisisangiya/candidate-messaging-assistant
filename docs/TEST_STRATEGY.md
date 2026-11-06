@@ -66,6 +66,8 @@
 
 ## Results
 
+History by step: each 'Not yet covered' refers to that step only. The current status is in the table above and in docs/reports/test-report.md.
+
 - Step 1: `pytest` 1 passed; Vitest 1 passed.
 - Steps 2-3: `cd backend && .venv/bin/python -m pytest` gave 41 passed (models, fixture validation, tools, SQLite repository, tools + repository integration); `ruff check .` clean.
 - Step 4: `.venv/bin/python -m pytest` gave 65 passed in total (24 new: FakeLLM policy and script mode, loop error handling, retry, max steps, LLM failure, plus integration runs over all four fixture conversations); `ruff check .` clean.
