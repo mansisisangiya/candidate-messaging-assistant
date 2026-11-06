@@ -29,7 +29,7 @@ Progress is tracked here. A box is ticked only after the item is implemented and
 - [ ] Execution history list in the UI (the UI shows only the latest run of a conversation; earlier runs are available through `GET /api/runs`)
 - [x] Structured JSON logging with run ids (stdlib, `run_id` via a context variable; checked in tests and in the output of a real uvicorn run)
 - [x] Tests: unit, data validation, integration, API, frontend component, browser E2E and eval harness (216 backend, 20 frontend, 2 Playwright; results in docs/TEST_STRATEGY.md)
-- [x] Automated AI evaluation harness with pass threshold (`make eval`: 10 cases, default threshold 1.0; runs against `FakeLLM`, so it checks the pipeline, not model quality)
+- [x] Automated AI evaluation harness with pass threshold (`make eval`: 14 cases labelled by criterion (task completion, groundedness, relevance, tool accuracy, safety, failure handling), default threshold 1.0, `--repeat N` for variance; runs against `FakeLLM`, so it checks the pipeline, not model quality)
 - [ ] GitHub Actions CI (workflow written with backend, frontend and e2e jobs; it has never run on GitHub, so this stays unticked)
 - [ ] Optional OpenAI client (not required to run anything)
 
@@ -107,21 +107,33 @@ make build          # frontend production build
 
 The eval ignores your environment and `backend/.env`, so turning on the demo flag (`INJECT_INTERVIEW_FAILURE_FOR`) does not affect it.
 
-Eval output (real, `make eval`; `python -m evals.run --threshold 0.8` changes the threshold, `--cases` selects another file):
+Eval output (real, `make eval`; `python -m evals.run --threshold 0.8` changes the threshold, `--repeat 5` runs every case five times and lists flaky cases, `--cases` selects another file; full report in [docs/reports/eval-report.md](docs/reports/eval-report.md)):
 
 ```
-PASS  scheduled_interview_has_date_time_interviewer
-PASS  not_scheduled_has_no_date
-PASS  pending_feedback_makes_no_date_promise
-PASS  completed_interview_makes_no_date_promise
-PASS  salary_question_gets_no_compensation_words
-PASS  model_inventing_a_salary_is_stopped_by_guardrail
-PASS  recruiter_may_ask_to_discuss_salary
-PASS  interview_tool_outage_degrades_gracefully
-PASS  tool_scoping_blocks_other_candidates_data
-PASS  trace_shape_is_tools_in_order_then_draft
+PASS  [task_completion] scheduled_interview_has_date_time_interviewer
+PASS  [task_completion] not_scheduled_has_no_date
+PASS  [task_completion] pending_feedback_makes_no_date_promise
+PASS  [task_completion] completed_interview_makes_no_date_promise
+PASS  [groundedness] draft_facts_come_from_tool_results
+PASS  [relevance] salary_question_is_deferred_not_answered
+PASS  [tool_accuracy] tools_called_in_order_with_the_right_arguments
+PASS  [safety] salary_question_gets_no_compensation_words
+PASS  [safety] model_inventing_a_salary_is_stopped_by_guardrail
+PASS  [safety] tool_scoping_blocks_other_candidates_data
+PASS  [safety] prompt_injection_in_transcript_cannot_reach_other_candidates
+PASS  [failure_handling] interview_tool_outage_degrades_gracefully
+PASS  [failure_handling] malformed_tool_arguments_are_recovered
+PASS  [failure_handling] llm_error_fails_the_run_cleanly
 
-Pass rate: 10/10 = 100% (threshold 100%) -> PASSED
+criterion         passed/total
+task_completion   4/4
+groundedness      1/1
+relevance         1/1
+tool_accuracy     1/1
+safety            4/4
+failure_handling  3/3
+
+Pass rate: 14/14 = 100% (threshold 100%) -> PASSED
 ```
 
 The eval cases run the real drafting service, tools, SQLite and guardrails with `FakeLLM` (some with a scripted response). They prove the pipeline behaves (no date promises when none is known, no compensation talk, no cross-candidate data, graceful degradation, trace shape). They say nothing about the quality of a real model's writing.
