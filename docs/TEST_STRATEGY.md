@@ -1,6 +1,6 @@
 # Test Strategy
 
-> **Status: partly implemented.** Tests exist for the health route, the Step 2-3 data layer, persistence and tools, the Step 4 FakeLLM and agent loop, the Step 5 state machine and read/draft API, and the Step 6 injected failure, guardrails and approve/reject. Other layers are still planned. Results are recorded only after they are actually run.
+> **Status: all layers implemented** (unit, data validation, integration, API, frontend component, browser E2E, eval harness) and run locally; the CI workflow has not run on GitHub yet. Results are recorded only after they are actually run.
 
 ## Principles
 
@@ -10,13 +10,13 @@
 
 ## Layers
 
-| Type | Tool | Planned coverage |
+| Type | Tool | Coverage |
 |---|---|---|
 | Unit | pytest | Tools return/raise correctly; state machine allows and forbids transitions; guardrails; agent loop with a scripted fake (call order, invalid tool args, max steps) |
 | Data validation | pytest | All fixtures parse into Pydantic models; references resolve (conversation -> candidate -> job); bad request bodies rejected (empty reason, over-long edited text) |
 | Integration | pytest | DraftingService + real tools + temp SQLite + FakeLLM: run saved with steps; injected failure gives a degraded draft plus an error step |
 | API | pytest + FastAPI TestClient | Draft then approve happy path; 404; 409 on double approve; 422 on reject without reason; failed run returns 201 with `failed` |
-| Frontend | Vitest + Testing Library | DraftPanel shows the right actions per status; reject requires a reason |
+| Frontend | Vitest + Testing Library (fetch mocked, no network) | API client (envelope, non-JSON error, network failure); DraftPanel per status (draft, buttons and trace; warning banner; failed run with no approve button; too-short reject reason makes no API call; edit vs no edit; 409 shows the message and refreshes); ConversationView (pending state, error alert, 500 limit); App list |
 | Browser E2E | Playwright | Backend with `LLM_PROVIDER=fake` plus Vite dev server: select conversation, draft, approve, see "Ready to send". Second test: failure candidate shows the warning |
 | AI eval | `backend/evals/run.py` | See below |
 
@@ -35,7 +35,7 @@
 
 - `backend`: ruff, pytest, fake-LLM eval (`python -m evals.run`; step added in Step 7, workflow not yet run on GitHub)
 - `frontend`: tsc, vitest, build
-- `e2e`: depends on both; installs Playwright Chromium
+- `e2e`: depends on both; installs Playwright Chromium, runs both Playwright tests, uploads the report on failure
 
 ## Results
 
@@ -45,3 +45,4 @@
 - Step 5: `cd backend && .venv/bin/python -m pytest` gave 128 passed (63 new: the full 5x5 transition matrix and terminal-state rules, stale conditional write rejected, tool retry/crash/too-many-calls handling, prompt fence, candidate scoping, drafting service, API 201/failed-201/404/422/500 envelopes); `ruff check .` clean. Not yet covered: approve/reject (409 on double approve is a Step 6 API test), guardrails, injected failure, eval harness, E2E.
 - Step 6: `cd backend && .venv/bin/python -m pytest` gave 188 passed (60 new: every guardrail rule including salary allowed by instructions, failure wrapper, loop test with a scripted LLM that mentions salary, case-insensitive fence strip, request-model stripping, injected failure integration (both error steps, no date) and API, approve as-is/edited, reject, 422/404, and 409 for double approve, approve after reject, reject after approve, approving a failed run, plus a stale approval that loses to a concurrent reject); `ruff check .` clean. Not yet covered: frontend, browser E2E, eval harness.
 - Step 7: `cd backend && .venv/bin/python -m pytest` gave 216 passed (28 new: 16 logging tests covering JSON validity, `run_id` on loop logs and cleared afterwards via caplog, state-transition and tool-error logs, and no emails or message text in logs; 12 eval-harness tests including the environment and `.env` hermeticity tests); `ruff check .` clean. `make eval`: 10/10 passed (100%, threshold 100%). Deliberately broken copy of the cases (two wrong expectations): 8/10 = 80% -> FAILED, exit 1. Not yet covered: frontend components, browser E2E.
+- Step 8: `make test` gave 216 backend and 20 frontend tests passed (19 new frontend tests: API client 7, DraftPanel 7, ConversationView 4, App 2, replacing the old heading test); `make lint` (ruff, `tsc`) clean; `make build` ok; `make e2e` (Playwright, Chromium): 2 passed, about 3-8 s. The E2E config starts its own backends with temp SQLite files and Vite servers. I also broke an assertion on purpose and confirmed Playwright saved a screenshot, trace and error context in `test-results/`, then restored it. Not covered: a UI history list, cross-browser runs, CI (never run on GitHub).

@@ -1,6 +1,6 @@
 # Candidate Messaging Assistant
 
-> **Status: Steps 1-7 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject, 7 eval harness and JSON logging).** The whole backend flow works over HTTP: list conversations, create a draft (the agent runs synchronously with `FakeLLM`), read the steps, approve or reject. There is no UI yet. Unticked items under "Planned features" are plans, not working software.
+> **Status: Steps 1-8 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject, 7 eval harness and JSON logging, 8 minimal frontend and Playwright E2E).** The full flow (list conversations, draft with `FakeLLM`, read the trace, approve or reject) works in the API and in a deliberately plain UI (no UI library, router or state library). Verified by backend and frontend tests and two Playwright tests; CI has not run on GitHub yet. Unticked items in the checklist are not done.
 
 ## Objective
 
@@ -8,28 +8,29 @@ An AI-powered assistant that helps a recruiter respond to candidates. A recruite
 
 Built as an engineering assessment to demonstrate: an agent that calls tools, state across steps, a backend API with a simple frontend, human approval, error handling with an injected failure, a layered test suite, an AI evaluation harness, logging and execution history, CI, and documentation.
 
-## Planned features
+## Feature checklist
 
 Progress is tracked here. A box is ticked only after the item is implemented and verified by running it.
 
 - [x] Project scaffolding (FastAPI + health endpoint, React/Vite/TS, pytest, Vitest, Makefile, CI workflow)
-- [ ] View seeded candidate conversations (UI; the `GET /api/conversations` endpoints are done, see below)
-- [ ] Ask the agent to draft a reply (UI; `POST /api/conversations/{id}/drafts` with optional instructions is done)
+- [x] View seeded candidate conversations (UI: list with status badges, transcript, candidate and job info; verified by component tests and the Playwright run)
+- [x] Ask the agent to draft a reply (UI: optional instructions up to 500 characters, loading state, errors in an alert; approve with optional edit, reject with a reason of at least 3 characters; a 409 shows the API message and refreshes the run)
 - [x] Read/draft API with a uniform error envelope (`GET /api/conversations`, `GET /api/conversations/{id}`, `POST /api/conversations/{id}/drafts`, `GET /api/runs`, `GET /api/runs/{id}`); verified with tests and real `curl` calls
 - [x] Run state machine (one transition table, conditional write, `InvalidTransition` -> 409)
 - [x] Candidate-scoped tools (the LLM cannot read another candidate's data) and a fenced, untrusted transcript in the prompt
 - [x] Agent tools: `get_candidate`, `get_interview_status`, `get_job`
 - [x] Persistence for agent runs and steps (SQLite repository)
 - [x] Pydantic models and validated JSON fixtures (4 candidates, 3 jobs, 4 conversations)
-- [x] Persisted multi-step agent run (steps, status, draft): `run_agent` with `FakeLLM`, max 6 LLM calls, runs end `awaiting_approval` or `failed` (not yet reachable over HTTP)
-- [x] Approve (optionally edited) or reject (reason required) over the API (`POST /api/runs/{id}/approve|reject`); double approve, approve after reject and approving a failed run return 409; verified with tests and real `curl` calls (no UI yet)
-- [x] Injected tool failure with graceful degradation (backend: `INJECT_INTERVIEW_FAILURE_FOR=cand_priya`; verified with tests and a real `curl`; the UI warning is not built)
+- [x] Persisted multi-step agent run (steps, status, draft): `run_agent` with `FakeLLM`, max 6 LLM calls, runs end `awaiting_approval` or `failed`; reachable over HTTP and in the UI (API tests, Playwright)
+- [x] Approve (optionally edited) or reject (reason required) over the API (`POST /api/runs/{id}/approve|reject`); double approve, approve after reject and approving a failed run return 409; verified by API tests, real `curl` calls and the Playwright approve flow; the UI exposes approve (with edit) and reject
+- [x] Injected tool failure with graceful degradation (backend: `INJECT_INTERVIEW_FAILURE_FOR=cand_priya`; verified by tests, a real `curl` and the `injected-failure` Playwright test, which checks the warning banner and the two error steps)
 - [x] Draft guardrails (non-empty, max 1200 characters, no placeholders, no compensation talk unless the recruiter asked); a violation fails the run and the draft is not stored
-- [ ] Execution history and trace view
+- [x] Trace view: every step of the run with type, tool, short input/output and duration, error steps highlighted, and a warning banner when a run that did not fail has error steps (verified by tests and the Playwright run)
+- [ ] Execution history list in the UI (the UI shows only the latest run of a conversation; earlier runs are available through `GET /api/runs`)
 - [x] Structured JSON logging with run ids (stdlib, `run_id` via a context variable; checked in tests and in the output of a real uvicorn run)
-- [ ] Tests: unit, data validation, integration, API, frontend, browser E2E (done so far: unit, data validation, integration, API and eval-harness tests; no frontend component or browser E2E tests yet)
+- [x] Tests: unit, data validation, integration, API, frontend component, browser E2E and eval harness (216 backend, 20 frontend, 2 Playwright; results in docs/TEST_STRATEGY.md)
 - [x] Automated AI evaluation harness with pass threshold (`make eval`: 10 cases, default threshold 1.0; runs against `FakeLLM`, so it checks the pipeline, not model quality)
-- [ ] GitHub Actions CI (workflow written and now includes the eval step; it has never run on GitHub)
+- [ ] GitHub Actions CI (workflow written with backend, frontend and e2e jobs; it has never run on GitHub, so this stays unticked)
 - [ ] Optional OpenAI client (not required to run anything)
 
 ## Technology
@@ -65,6 +66,12 @@ make backend        # FastAPI on http://localhost:8000
 make frontend       # Vite on http://localhost:5173 (proxies /api to :8000)
 ```
 
+The UI at http://localhost:5173 lists the seeded conversations. Select one, optionally add instructions, click **Draft reply**, read the trace, then edit/approve or reject.
+
+![Draft panel with trace](docs/screenshots/draft-panel.png)
+
+**E2E tests.** `make e2e` runs two Playwright tests in Chromium. The config starts its own backends (temporary SQLite files, `LLM_PROVIDER=fake`) and Vite servers on ports 8100/5174 and 8101/5175, so it never touches `backend/data/` or servers you have running. The first test selects Priya, drafts, checks the trace, approves and sees "approved". The second runs against a backend started with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya` and checks the warning banner and the two error steps. On failure it keeps a screenshot and trace in `frontend/test-results/`. Prerequisites: run `make install` first (the config starts the backend with `backend/.venv/bin/python`; set `E2E_PYTHON=/path/to/python` to use another interpreter), and once run `cd frontend && npx playwright install chromium`. The E2E code is type-checked by `make lint` (`tsconfig.e2e.json`).
+
 Check the backend: `curl http://localhost:8000/api/health` returns `{"status":"ok","llm_provider":"fake"}`.
 
 Try the API (run state is stored in `backend/data/app.db`, git-ignored):
@@ -93,6 +100,7 @@ make test           # backend (pytest) + frontend (Vitest)
 make test-backend
 make test-frontend
 make eval           # AI eval cases against FakeLLM; exits non-zero below the pass threshold
+make e2e            # Playwright (needs `cd frontend && npx playwright install chromium` once)
 make lint           # ruff + tsc
 make build          # frontend production build
 ```

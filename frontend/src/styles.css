@@ -1,0 +1,33 @@
+body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; background: #f6f7f9; }
+main { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+.layout { display: grid; grid-template-columns: 300px 1fr; gap: 1rem; align-items: start; }
+.content, .conversation-list { background: #fff; border: 1px solid #d8dbe0; border-radius: 6px; }
+.content { padding: 1rem; }
+.conversation-list { list-style: none; margin: 0; padding: 0; }
+.conversation-item { display: flex; flex-direction: column; gap: 0.2rem; width: 100%; text-align: left;
+  padding: 0.7rem; border: 0; border-bottom: 1px solid #eceef1; background: none; cursor: pointer; font: inherit; }
+.conversation-item.selected { background: #e8f0fe; }
+.preview, .muted { color: #5b6370; font-size: 0.85rem; }
+.preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transcript { list-style: none; padding: 0; }
+.message { padding: 0.4rem 0.6rem; margin: 0.3rem 0; border-radius: 4px; background: #f0f2f5; }
+.message-recruiter { background: #e6f4ea; }
+label { display: block; margin: 0.6rem 0 0.2rem; font-weight: 600; }
+textarea, input[type="text"] { display: block; font-weight: 400; width: 100%; box-sizing: border-box; font: inherit; padding: 0.4rem; }
+button { font: inherit; padding: 0.4rem 0.9rem; margin: 0.4rem 0.4rem 0 0; cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.6; }
+.badge { display: inline-block; padding: 0 0.5rem; border-radius: 999px; font-size: 0.75rem; background: #e0e3e8; }
+.badge-awaiting_approval { background: #fff1c2; }
+.badge-approved { background: #c9efd3; }
+.badge-rejected { background: #f3d0d0; }
+.badge-failed { background: #f3b4b4; }
+.alert { padding: 0.6rem 0.8rem; border-radius: 4px; margin: 0.6rem 0; }
+.alert-error { background: #fde8e8; border: 1px solid #e5a3a3; }
+.alert-warning { background: #fff4d6; border: 1px solid #e6c36a; }
+.draft-panel { border-top: 1px solid #d8dbe0; margin-top: 1.2rem; }
+.trace { padding-left: 1.2rem; }
+.step { display: flex; gap: 0.6rem; flex-wrap: wrap; padding: 0.25rem 0; font-size: 0.9rem; }
+.step-type { font-weight: 600; min-width: 6rem; }
+.step-summary { flex: 1; word-break: break-word; }
+.step-error { background: #fde8e8; border-left: 4px solid #c0392b; padding-left: 0.4rem; }
+blockquote { margin: 0.4rem 0; padding: 0.5rem 0.8rem; background: #f0f2f5; border-left: 4px solid #2e7d32; }

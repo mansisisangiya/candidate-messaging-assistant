@@ -98,7 +98,7 @@ Note: the session switched models between entries 1 and 2 (Opus 5.5 for planning
 - Showing the harness can fail: a copy of the cases with two wrong expectations gave 8/10 = 80% and exit 1; tests also break the guardrail and the failure injection on purpose and expect the eval to fail.
 - The caplog test needs `RunIdFilter` installed on caplog's handler, because the filter lives on our handler; other logging tests parse the JSON that `configure_logging` writes.
 - I suppress logging during the eval run (restored afterwards) so the report stays readable.
-**Outcome:** Verified by running: 216 backend tests passed (after the entry 9 fixes; 213 before), ruff clean, `make eval` 10/10, and a real uvicorn run whose stderr was JSON lines with `run_id` on loop and transition logs. Pending the user's review.
+**Outcome:** Verified by running: 216 backend tests passed (after the entry 9 fixes; 213 before), ruff clean, `make eval` 10/10, and a real uvicorn run whose stderr was JSON lines with `run_id` on loop and transition logs. Accepted and committed as `6f1137d` together with the entry 9 fixes.
 
 ## 9. Step 7 review fixes: hermetic eval, threshold 1.0
 **Reviewer finding:** with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya` set in the shell, the eval dropped to 8/10 and exited 1, because `Settings(**case.env)` still read the environment and `backend/.env`. The same could happen for a developer with a copied `.env.example`, or in CI. I reproduced it first with new tests (env var, `.env` file in the working directory, default threshold), which failed before the fix.
@@ -106,6 +106,23 @@ Note: the session switched models between entries 1 and 2 (Opus 5.5 for planning
 - Settings for each case are built with `_env_file=None` and `inject_interview_failure_for=""` as the base, then only the case's own overrides (merged in a dict; my first version passed the keyword twice and crashed for the outage case, caught by running it). Init values beat environment variables, so every case starts from known defaults.
 - Default threshold changed from 0.9 to 1.0. My earlier note that I "kept your default" was not a rationale: with a deterministic fake and 10 cases, 0.9 lets one real regression through with exit 0. A live-model run would use a lower threshold such as 0.8 (not built).
 - Correction: my Step 7 report said the real `make eval` output was in the README, but the block was empty (my capture command used a `sed` pattern that does not work on macOS). It is now filled from an actual run.
-**Outcome:** see the Step 7 results in TEST_STRATEGY.md. Pending the user's review.
+**Outcome:** see the Step 7 results in TEST_STRATEGY.md. Accepted and committed as `6f1137d`.
+
+## 10. Step 8: minimal frontend and Playwright E2E
+**Model:** Sonnet 5.5
+**Prompt (summary):** Typed API client, five plain components (list, conversation view, draft panel with approve/reject, trace panel inside it), component tests with mocked fetch, one Playwright test for the main workflow (plus a second for the injected failure if cheap), `make e2e`, an `e2e` CI job, a screenshot, docs. No UI library, router or state library; no backend changes unless blocked.
+**AI output:** `frontend/src/{types,api}.ts`, `components/*`, `App.tsx`, `styles.css`, 19 new Vitest tests, `playwright.config.ts`, `e2e/{workflow,failure}.spec.ts`, Makefile target, CI job, docs.
+**Decisions and changes:**
+- The first message of this step ended at item 1, so I built and reported only the API client and types, then continued when the full brief arrived.
+- The second E2E (injected failure) was cheap enough: the config starts a second backend and Vite server on other ports, each project pointing at its own stack. I kept it.
+- Added `VITE_API_PROXY` to `vite.config.ts` (a small change not in the brief) so the E2E stacks use ports 8100/8101 and 5174/5175 and never collide with a dev server on 8000/5173.
+- Vitest would have picked up the Playwright specs, so its `include` is limited to `src/**`.
+- Approve sends `edited_text` only when the text changed, so an unedited approval keeps `final_text` equal to the draft exactly.
+- On a 409 the panel shows the API message and re-fetches the run, as asked.
+- The `ApiError` class lives in `types.ts` (the brief wanted it with the types).
+- Rejected/not done: a run-history list in the UI. The brief asked for the trace of the latest run, which is what exists, so I split the README item and left history unticked rather than tick something the UI does not do.
+- A first selector in the E2E (`getByRole("textbox", { name: /draft/i })`) would have matched the instructions box too; I used the draft box's full label. In the App test I removed a click that would have rendered the detail view from the wrong mocked shape.
+- Playwright can only be proven useful if it can fail: I broke an assertion on purpose, saw the failure with a screenshot, trace and error context saved, and restored it.
+**Outcome:** Verified by running: 216 backend and 20 frontend tests passed, ruff and `tsc` clean, `make build` ok, `make e2e` 2 passed; the screenshot in `docs/screenshots/draft-panel.png` was captured by the E2E test. Pending the user's review.
 
 <!-- Add new entries below. Format: number, title, prompt summary, AI output, outcome (accepted / modified / rejected, and why). -->

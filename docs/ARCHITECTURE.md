@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: partly implemented.** Built (Steps 1-6): config and health route (1); models, fixtures and store (2); SQLite repository and tool registry (3); `LLMClient`, `FakeLLM` and agent loop (4); state machine, drafting service, read/draft API and error envelope (5); injected failure, guardrails and approve/reject (6); Eval harness and JSON logging (7). Still planned: UI, OpenAI client.
+> **Status: implemented except the optional OpenAI client.** Built (Steps 1-8): config and health route (1); models, fixtures and store (2); SQLite repository and tool registry (3); `LLMClient`, `FakeLLM` and agent loop (4); state machine, drafting service, read/draft API and error envelope (5); injected failure, guardrails and approve/reject (6); Eval harness and JSON logging (7); frontend and Playwright E2E (8). Not built: OpenAI client, live-eval workflow.
 
 ## Layers
 
@@ -63,7 +63,7 @@ Errors use `{"error": {"code": "...", "message": "..."}}`.
 | GET | `/api/runs?conversation_id=` | none | run summaries without steps, newest first, with `step_count` | none |
 | GET | `/api/runs/{run_id}` | none | `AgentRun` with steps | 404 |
 | POST | `/api/runs/{run_id}/approve` | `{edited_text?: str 1-2000}` | 200 `AgentRun` | 404, 409, 422 |
-| POST (planned, Step 6) | `/api/runs/{run_id}/reject` | `{reason: str 3-500}` | 200 `AgentRun` | 404, 409, 422 |
+| POST | `/api/runs/{run_id}/reject` | `{reason: str 3-500}` | 200 `AgentRun` | 404, 409, 422 |
 
 Error mapping: `not_found` 404, `invalid_transition` 409, request validation 422 (`validation_error`; the invalid input is not echoed), `llm_error` 502, anything else 500 with a generic message and no traceback. Implemented in `api/errors.py`. A failed run still returns 201: the run was created and `status: failed` plus `error` is the result.
 
@@ -137,14 +137,26 @@ Steps are persisted as they happen, so failed runs still have a trace.
 - Logging: `app/logging_config.py` has a JSON formatter, a filter that adds `run_id` from the `run_id_var` context variable, and `configure_logging(level)` (called once in `create_app()`, idempotent). `bind_run_id(run_id)` sets the variable and resets it in `finally`; `run_agent` and `transition()` use it (so approve/reject transitions are tagged too). Logged: run started / completed (status, `duration_ms`) / failed, tool errors and retries (tool name and error code only), guardrail violations, and every state transition or rejected transition (from, to). Rule: log ids, codes, counts and durations, never emails or message text; a test scans the logs for both.
 - Trade-offs: a context variable (not a parameter) keeps log calls free of plumbing; threads in FastAPI each get their own context, which suits synchronous runs. A failed run's `error` text is logged, so it must stay free of PII (it holds generic guardrail or LLM error messages).
 
-## Planned repo layout
+## Frontend as built (Step 8)
+
+Plain React + TypeScript (strict, no `any`); no UI library, router or state library.
+
+- `src/types.ts`: every API type, mirroring `models.py` (kept in sync by hand), plus the `ApiError` class. `src/api.ts`: one typed `fetch` wrapper per endpoint; a non-2xx response is parsed as the error envelope and thrown as `ApiError(code, message, status)`; a non-JSON error becomes `http_error` and an unreachable server `network_error`.
+- `App.tsx` holds the state (conversation list, selected detail, error). It ignores a slower response for a previously selected conversation, and refreshes the list after any run change so the badges stay current.
+- `ConversationList`, `ConversationView` (transcript, info, instructions, Draft reply with pending state and an error alert), `DraftPanel` (draft in an editable textarea only while `awaiting_approval`, approve, reject with a reason checked client-side, outcome display, 409 handling), `TracePanel` (steps in order, error steps highlighted), `StatusBadge`.
+- Degraded warning: shown when the run has any `error` step and is not `failed`. This is the "derived, not stored" rule from Step 6.
+- Approve sends `edited_text` only if the recruiter changed the text. Client-side checks (empty draft, reason under 3 characters) only save a round trip; the backend still validates.
+- Vite proxies `/api` to `VITE_API_PROXY` (default `http://localhost:8000`); the E2E config uses this to point at its own backend.
+- Limitation: only the latest run of a conversation is shown; there is no history list.
+
+## Repo layout
 
 ```
 backend/app/{main.py, config.py, logging_config.py, models.py, api/, services/, agent/, llm/, db/, data/fixtures/}
 backend/tests/{unit/, integration/, api/}
 backend/evals/{cases.yaml, run.py}   (built)
 frontend/src/{api.ts, types.ts, App.tsx, components/}   frontend/e2e/
-.github/workflows/{ci.yml, eval-live.yml}
+.github/workflows/ci.yml   (eval-live.yml is not built)
 ```
 
 ## Known limitations (by design)
