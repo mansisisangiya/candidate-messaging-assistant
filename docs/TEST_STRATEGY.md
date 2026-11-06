@@ -1,6 +1,6 @@
 # Test Strategy
 
-> **Status: proposed (planned).** No tests exist yet. Results will be recorded here only after they are actually run.
+> **Status: partly implemented.** Tests exist for the health route and the Step 2 data layer and tools. Other layers are still planned. Results are recorded only after they are actually run.
 
 ## Principles
 
@@ -39,4 +39,5 @@ Limitation: evals against the fake validate the pipeline, not model quality. Thi
 
 ## Results
 
-None yet. This section will list the commands run and their actual outcomes as each layer is built.
+- Step 1: `pytest` 1 passed; Vitest 1 passed.
+- Step 2: `cd backend && .venv/bin/python -m pytest` gave 41 passed (models, fixture validation, tools, SQLite repository, tools + repository integration); `ruff check .` clean.

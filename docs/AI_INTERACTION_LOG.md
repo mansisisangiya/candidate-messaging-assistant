@@ -28,4 +28,16 @@ Note: the session switched models between entries 1 and 2 (Opus 5.5 for planning
 - Removed `@testing-library/user-event` after installing it, since nothing uses it yet (it can be added back in the frontend step).
 **Outcome:** Verified by running: backend pytest 1 passed, ruff clean, frontend Vitest 1 passed, `tsc` clean, Vite build succeeded, live `curl` of `/api/health` returned 200. CI workflow was written but has not been run on GitHub.
 
+## 4. Step 2: data layer and read-only tools
+**Model:** Sonnet 5.5
+**Prompt (summary):** Review the docs and Step 1 code, then build Pydantic models, SQLite persistence for runs and steps, JSON fixtures, the three read-only tools, validation and error handling, plus unit and integration tests. No agent loop, LLM, approval workflow or frontend. Update README and this log.
+**AI output:** `models.py`, `errors.py`, `data/store.py` with four fixture files, `db/repo.py`, `agent/tools.py`, `tests/` (unit and integration), docs updates.
+**Decisions and changes:**
+- Added `not_scheduled` to the interview status enum (deviation from the original design) so a candidate with no interview gets a normal answer, not an error.
+- Added a `DATABASE_PATH` setting; the config file was the only Step 1 file modified.
+- Replaced a `model_post_init` validator with a pydantic `model_validator` after reviewing it; ruff removed an unneeded `noqa`.
+- Left status-transition enforcement out of the repository on purpose; it belongs to the Step 4 state machine.
+- Injected failure not implemented; only the `ToolUnavailableError` class exists.
+**Outcome:** Verified by running: 41 backend tests passed, ruff clean. Pending the user's review.
+
 <!-- Add new entries below. Format: number, title, prompt summary, AI output, outcome (accepted / modified / rejected, and why). -->

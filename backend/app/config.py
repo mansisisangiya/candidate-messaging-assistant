@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None  # only read if llm_provider == "openai"
     log_level: str = "INFO"
     cors_origins: str = "http://localhost:5173"
+    database_path: str = "data/app.db"  # mutable run state; git-ignored (*.db)
 
 
 @lru_cache

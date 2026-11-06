@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: design only (planned).** Nothing described here is implemented yet.
+> **Status: partly implemented.** Built (Steps 1-2): config, health route, models, fixtures and store, SQLite repository, tool registry. Everything else below (agent loop, LLM, services, run/approval API, logging, UI) is planned.
 
 ## Layers
 
@@ -34,7 +34,7 @@ Logging: JSON lines; a `run_id` is attached via a context variable.
 
 - `Candidate {id, name, email, job_id, stage}`
 - `Job {id, title, team, location}`
-- `Interview {candidate_id, status: scheduled|completed|pending_feedback, scheduled_at?, interviewer?}`
+- `Interview {candidate_id, status: not_scheduled|scheduled|completed|pending_feedback, scheduled_at?, interviewer?}` (`not_scheduled` added in Step 2 so a candidate with no interview still gets a normal answer instead of an error; a scheduled interview must have `scheduled_at`)
 - `Message {sender: candidate|recruiter, text, sent_at}`
 - `Conversation {id, candidate_id, messages}`
 - `AgentStep {index, type: tool_call|tool_result|llm_message|error, name?, input?, output?, error?, duration_ms, ts}`
@@ -90,6 +90,14 @@ Steps are persisted as they happen, so failed runs still have a trace.
 **Injected failure:** a config flag or a designated fixture candidate makes `get_interview_status` raise `ToolUnavailableError`. The agent retries once, then receives an error result and drafts without promising a date. The step is logged as `error` and the UI shows a warning. LLM failure or max steps marks the run `failed`.
 
 **Guardrails:** draft non-empty, at most 1200 characters, no leftover placeholders (`[Name]`, `{{`), no salary or compensation mention unless the recruiter's instructions include it.
+
+## Data layer as built (Step 2)
+
+- `models.py`: all Pydantic models (`extra="forbid"`). Ids are restricted to `[A-Za-z0-9_-]{1,64}`, which also constrains LLM-supplied tool arguments.
+- `data/store.py`: `FixtureStore` loads the four JSON files once, validates them, and checks references (candidate->job, interview->candidate, conversation->candidate) and duplicate ids. A bad fixture raises `FixtureError` at startup, not mid-run.
+- `db/repo.py`: `RunRepository` (stdlib `sqlite3`, tables `runs` and `steps`, one connection per operation). `update_run` only touches a whitelist of columns and does **not** enforce status transitions; the state machine (Step 4) will own that.
+- `agent/tools.py`: `ToolRegistry.execute(name, raw_args)` validates args against the Pydantic input model and returns JSON-able dicts. Errors: `ToolInputError`, `UnknownToolError`, `RecordNotFoundError` (all in `errors.py`). `ToolUnavailableError` exists but nothing raises it until the injected failure is built.
+- `DATABASE_PATH` (default `data/app.db`, git-ignored) selects the SQLite file.
 
 ## Planned repo layout
 

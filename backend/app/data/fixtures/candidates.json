@@ -1,0 +1,6 @@
+[
+  {"id": "cand_priya", "name": "Priya Sharma", "email": "priya.sharma@example.com", "job_id": "job_backend", "stage": "interview"},
+  {"id": "cand_marcus", "name": "Marcus Lee", "email": "marcus.lee@example.com", "job_id": "job_designer", "stage": "interview"},
+  {"id": "cand_elena", "name": "Elena Rossi", "email": "elena.rossi@example.com", "job_id": "job_data", "stage": "applied"},
+  {"id": "cand_tom", "name": "Tom Becker", "email": "tom.becker@example.com", "job_id": "job_backend", "stage": "offer"}
+]

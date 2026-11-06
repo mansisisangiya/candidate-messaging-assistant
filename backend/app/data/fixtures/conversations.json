@@ -1,0 +1,16 @@
+[
+  {"id": "conv_priya", "candidate_id": "cand_priya", "messages": [
+    {"sender": "recruiter", "text": "Hi Priya, thanks for applying. We'd like to invite you to a technical interview.", "sent_at": "2026-11-02T09:00:00Z"},
+    {"sender": "candidate", "text": "Thanks! Could you confirm the date and time of the interview, and who I'll be speaking with?", "sent_at": "2026-11-05T08:15:00Z"}
+  ]},
+  {"id": "conv_marcus", "candidate_id": "cand_marcus", "messages": [
+    {"sender": "candidate", "text": "Hi, I interviewed on Tuesday and haven't heard anything since. Do you have an update?", "sent_at": "2026-11-05T16:40:00Z"}
+  ]},
+  {"id": "conv_elena", "candidate_id": "cand_elena", "messages": [
+    {"sender": "candidate", "text": "Hello, I applied last week for the Data Analyst role. Is there a next step I should prepare for?", "sent_at": "2026-11-04T11:05:00Z"}
+  ]},
+  {"id": "conv_tom", "candidate_id": "cand_tom", "messages": [
+    {"sender": "recruiter", "text": "Hi Tom, great to hear the interview went well.", "sent_at": "2026-10-29T10:00:00Z"},
+    {"sender": "candidate", "text": "Thank you! What is the salary range for this role, and where is the team based?", "sent_at": "2026-11-01T13:20:00Z"}
+  ]}
+]

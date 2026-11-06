@@ -1,6 +1,6 @@
 # Candidate Messaging Assistant
 
-> **Status: Step 1 (scaffolding) complete.** The backend serves `GET /api/health` and the frontend renders a placeholder page. No agent functionality exists yet. Unticked items under "Planned features" are plans, not working software.
+> **Status: Steps 1-2 complete (scaffolding, data layer, read-only tools).** The backend has validated fixtures, SQLite run/step persistence and three tools, all covered by tests. There is no agent loop, LLM, approval workflow or UI yet. Unticked items under "Planned features" are plans, not working software.
 
 ## Objective
 
@@ -15,13 +15,15 @@ Progress is tracked here. A box is ticked only after the item is implemented and
 - [x] Project scaffolding (FastAPI + health endpoint, React/Vite/TS, pytest, Vitest, Makefile, CI workflow)
 - [ ] View seeded candidate conversations
 - [ ] Ask the agent to draft a reply (with optional recruiter instructions)
-- [ ] Agent tools: `get_candidate`, `get_interview_status`, `get_job`
+- [x] Agent tools: `get_candidate`, `get_interview_status`, `get_job` (tools only; the agent loop that calls them is not built)
+- [x] Persistence for agent runs and steps (SQLite repository; the run lifecycle and agent loop are not built)
+- [x] Pydantic models and validated JSON fixtures (4 candidates, 3 jobs, 4 conversations)
 - [ ] Persisted multi-step agent run (steps, status, draft)
 - [ ] Approve (optionally edited) or reject (reason required)
 - [ ] Injected tool failure with graceful degradation
 - [ ] Execution history and trace view
 - [ ] Structured JSON logging with run ids
-- [ ] Tests: unit, data validation, integration, API, frontend, browser E2E
+- [ ] Tests: unit, data validation, integration, API, frontend, browser E2E (done so far: unit, data validation, integration for the data layer and tools)
 - [ ] Automated AI evaluation harness with pass threshold
 - [ ] GitHub Actions CI
 - [ ] Optional OpenAI client (not required to run anything)

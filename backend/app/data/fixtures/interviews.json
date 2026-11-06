@@ -1,0 +1,6 @@
+[
+  {"candidate_id": "cand_priya", "status": "scheduled", "scheduled_at": "2026-11-12T14:00:00Z", "interviewer": "Daniel Okafor"},
+  {"candidate_id": "cand_marcus", "status": "pending_feedback", "scheduled_at": "2026-11-03T10:30:00Z", "interviewer": "Hannah Weiss"},
+  {"candidate_id": "cand_elena", "status": "not_scheduled"},
+  {"candidate_id": "cand_tom", "status": "completed", "scheduled_at": "2026-10-28T15:00:00Z", "interviewer": "Daniel Okafor"}
+]
