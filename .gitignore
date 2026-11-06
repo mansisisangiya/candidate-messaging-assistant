@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+# Node
+node_modules/
+frontend/dist/
+# Env and local data
+.env
+*.db
+*.sqlite3
+# Test artifacts
+playwright-report/
+test-results/
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
