@@ -1,6 +1,6 @@
 # Test Strategy
 
-> **Status: partly implemented.** Tests exist for the health route, the Step 2-3 data layer, persistence and tools, the Step 4 FakeLLM and agent loop, and the Step 5 state machine and read/draft API. Other layers are still planned. Results are recorded only after they are actually run.
+> **Status: partly implemented.** Tests exist for the health route, the Step 2-3 data layer, persistence and tools, the Step 4 FakeLLM and agent loop, the Step 5 state machine and read/draft API, and the Step 6 injected failure, guardrails and approve/reject. Other layers are still planned. Results are recorded only after they are actually run.
 
 ## Principles
 
@@ -43,3 +43,4 @@ Limitation: evals against the fake validate the pipeline, not model quality. Thi
 - Steps 2-3: `cd backend && .venv/bin/python -m pytest` gave 41 passed (models, fixture validation, tools, SQLite repository, tools + repository integration); `ruff check .` clean.
 - Step 4: `.venv/bin/python -m pytest` gave 65 passed in total (24 new: FakeLLM policy and script mode, loop error handling, retry, max steps, LLM failure, plus integration runs over all four fixture conversations); `ruff check .` clean.
 - Step 5: `cd backend && .venv/bin/python -m pytest` gave 128 passed (63 new: the full 5x5 transition matrix and terminal-state rules, stale conditional write rejected, tool retry/crash/too-many-calls handling, prompt fence, candidate scoping, drafting service, API 201/failed-201/404/422/500 envelopes); `ruff check .` clean. Not yet covered: approve/reject (409 on double approve is a Step 6 API test), guardrails, injected failure, eval harness, E2E.
+- Step 6: `cd backend && .venv/bin/python -m pytest` gave 188 passed (60 new: every guardrail rule including salary allowed by instructions, failure wrapper, loop test with a scripted LLM that mentions salary, case-insensitive fence strip, request-model stripping, injected failure integration (both error steps, no date) and API, approve as-is/edited, reject, 422/404, and 409 for double approve, approve after reject, reject after approve, approving a failed run, plus a stale approval that loses to a concurrent reject); `ruff check .` clean. Not yet covered: frontend, browser E2E, eval harness.

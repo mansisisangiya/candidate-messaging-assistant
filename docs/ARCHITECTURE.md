@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: partly implemented.** Built (Steps 1-5): config and health route (1); models, fixtures and store (2); SQLite repository and tool registry (3); `LLMClient`, `FakeLLM` and agent loop (4); state machine, drafting service, read/draft API and error envelope (5). Still planned: approve/reject, guardrails, injected failure, JSON logging config, UI, OpenAI client, evals.
+> **Status: partly implemented.** Built (Steps 1-6): config and health route (1); models, fixtures and store (2); SQLite repository and tool registry (3); `LLMClient`, `FakeLLM` and agent loop (4); state machine, drafting service, read/draft API and error envelope (5); injected failure, guardrails and approve/reject (6). Still planned: JSON logging config, UI, OpenAI client, evals.
 
 ## Layers
 
@@ -62,7 +62,7 @@ Errors use `{"error": {"code": "...", "message": "..."}}`.
 | POST | `/api/conversations/{id}/drafts` | `{instructions?: str <=500}` | 201 `AgentRun` (`awaiting_approval` or `failed`) | 404, 422 |
 | GET | `/api/runs?conversation_id=` | none | run summaries without steps, newest first, with `step_count` | none |
 | GET | `/api/runs/{run_id}` | none | `AgentRun` with steps | 404 |
-| POST (planned, Step 6) | `/api/runs/{run_id}/approve` | `{edited_text?: str 1-2000}` | 200 `AgentRun` | 404, 409, 422 |
+| POST | `/api/runs/{run_id}/approve` | `{edited_text?: str 1-2000}` | 200 `AgentRun` | 404, 409, 422 |
 | POST (planned, Step 6) | `/api/runs/{run_id}/reject` | `{reason: str 3-500}` | 200 `AgentRun` | 404, 409, 422 |
 
 Error mapping: `not_found` 404, `invalid_transition` 409, request validation 422 (`validation_error`; the invalid input is not echoed), `llm_error` 502, anything else 500 with a generic message and no traceback. Implemented in `api/errors.py`. A failed run still returns 201: the run was created and `status: failed` plus `error` is the result.
@@ -87,7 +87,7 @@ Steps are persisted as they happen, so failed runs still have a trace.
 
 **FakeLLM:** scripted policy that reads message history and calls the tools in order, then writes a template draft from the results. It proves the orchestration, not model quality.
 
-**Injected failure:** a config flag or a designated fixture candidate makes `get_interview_status` raise `ToolUnavailableError`. The agent retries once, then receives an error result and drafts without promising a date. The step is logged as `error` and the UI shows a warning. LLM failure or max steps marks the run `failed`.
+**Injected failure:** `INJECT_INTERVIEW_FAILURE_FOR=<candidate_id>` makes `get_interview_status` raise `ToolUnavailableError` for that candidate's conversations. The agent retries once, then receives an error result and drafts without promising a date. Both attempts are logged as `error` steps and the UI shows a warning. LLM failure or max steps marks the run `failed`.
 
 **Guardrails:** draft non-empty, at most 1200 characters, no leftover placeholders (`[Name]`, `{{`), no salary or compensation mention unless the recruiter's instructions include it.
 
@@ -96,7 +96,7 @@ Steps are persisted as they happen, so failed runs still have a trace.
 - `models.py`: all Pydantic models (`extra="forbid"`). Ids are restricted to `[A-Za-z0-9_-]{1,64}`, which also constrains LLM-supplied tool arguments.
 - `data/store.py`: `FixtureStore` loads the four JSON files once, validates them, and checks references (candidate->job, interview->candidate, conversation->candidate) and duplicate ids. A bad fixture raises `FixtureError` at startup, not mid-run.
 - `db/repo.py`: `RunRepository` (stdlib `sqlite3`, tables `runs` and `steps`, one connection per operation). `update_run` only touches a whitelist of non-status columns; `update_status_if` is the conditional status write, used only by the state machine.
-- `agent/tools.py`: `ToolRegistry.execute(name, raw_args)` validates args against the Pydantic input model and returns JSON-able dicts. Errors: `ToolInputError`, `UnknownToolError`, `RecordNotFoundError` (all in `errors.py`). `ToolUnavailableError` exists but nothing raises it until the injected failure is built.
+- `agent/tools.py`: `ToolRegistry.execute(name, raw_args)` validates args against the Pydantic input model and returns JSON-able dicts. Errors: `ToolInputError`, `UnknownToolError`, `RecordNotFoundError` (all in `errors.py`). `ToolUnavailableError` is raised only by the injected failure wrapper (Step 6).
 - `DATABASE_PATH` (default `data/app.db`, git-ignored) selects the SQLite file.
 
 ## Agent loop as built (Step 4)
@@ -122,6 +122,14 @@ Steps are persisted as they happen, so failed runs still have a trace.
 - `api/deps.py`: the one place that builds store, repository, LLM (`llm/factory.py`, chosen by `LLM_PROVIDER`) and service. Tests override `get_repo` and `get_llm` with `app.dependency_overrides`.
 - `api/routes.py` is thin: validate, call a service, return. `api/errors.py` converts every error into the envelope.
 
+## Injected failure, guardrails and approval as built (Step 6)
+
+- `agent/failure_injection.py` `FailingTools`: wraps a tool executor; `get_interview_status` raises `ToolUnavailableError` on every call, so the loop's single retry fails as well. `DraftingService` wraps the tools only when the conversation's candidate equals `INJECT_INTERVIEW_FAILURE_FOR` (default empty, off). Demo/E2E candidate: `cand_priya`, whose interview is really scheduled, so "no date in the draft" is a meaningful check. Result: steps `error ... retrying`, `error`, then a draft like "I'm checking on the interview details and will confirm them shortly", and the run ends `awaiting_approval`.
+- **Degraded signal:** derived, not stored. A run is degraded when it has `error` steps. Why: a separate `warnings` list would duplicate what the steps already say and need a schema change, and it would have to be kept in sync. Trade-off: any recovered error (for example a bad tool argument the model fixed) also counts as a warning, which is acceptable for a recruiter-facing hint.
+- `agent/guardrails.py` `validate_draft(draft, instructions) -> list[str]`: non-empty, at most 1200 characters, no placeholders (`[Name]`, `{{`), no compensation words or currency amounts unless the recruiter's instructions contain such a word. The loop calls it after the LLM returns text. The `llm_message` step stays in the trace for debugging, an `error` step `guardrail_violation: ...` is added, and the run goes to `failed` with the violations as `error`. `draft_text` stays empty, so nothing approvable exists. Compensation matching is a keyword list, a deliberate limit: it is simple to explain, not complete.
+- `services/approval.py` `ApprovalService`: `approve(run_id, edited_text=None)` sets `final_text` to the edit (stripped) or the draft; `reject(run_id, reason)` sets `rejection_reason`. Both only call `transition()`; the service has no status checks of its own, so double approve, approve after reject and approving a failed run all produce `InvalidTransition` (409). Request models strip text first, so a whitespace-only edit or reason is a 422.
+- Routes `POST /api/runs/{id}/approve` (optional body) and `/reject` (body required) are thin and return the updated `AgentRun`.
+
 ## Planned repo layout
 
 ```
@@ -135,3 +143,5 @@ frontend/src/{api.ts, types.ts, App.tsx, components/}   frontend/e2e/
 ## Known limitations (by design)
 
 No auth, no real sending, synchronous runs, FakeLLM does not demonstrate real model quality, SQLite is single-node only.
+
+Known limitation: if the write to the `failed` state itself fails (for example the database goes away while handling an error), the run is left in `running`. There is no recovery sweep; runs are synchronous, so it would only affect that one request.

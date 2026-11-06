@@ -69,6 +69,21 @@ Note: the session switched models between entries 1 and 2 (Opus 5.5 for planning
 - Added a handler for Starlette HTTP errors so unknown paths also use the envelope.
 - My first draft of the 500-envelope test was muddled (it set up a scripted LLM it then discarded). I rewrote it to fail the repository dependency instead.
 - Rejected: moving the `status -> HTTP` mapping onto the exception classes; it stays in `api/errors.py` so domain errors do not know about HTTP.
-**Outcome:** Verified by running: 128 backend tests passed, ruff clean, and a real `curl` against uvicorn: `POST /drafts` 201 with 7 steps, unknown conversation 404 envelope, 501-character instructions 422 envelope, conversation and run lists. Pending the user's review.
+**Outcome:** Verified by running: 128 backend tests passed, ruff clean, and a real `curl` against uvicorn: `POST /drafts` 201 with 7 steps, unknown conversation 404 envelope, 501-character instructions 422 envelope, conversation and run lists. Accepted and committed as `1179e6c`.
+
+## 7. Step 6: injected failure, guardrails, approve/reject
+**Model:** Sonnet 5.5
+**Prompt (summary):** Three small fixes first (case-insensitive fence strip, blank `instructions` to `None`, a known-limitations line). Then an injected `get_interview_status` failure chosen by `INJECT_INTERVIEW_FAILURE_FOR`, draft guardrails that fail the run, approve/reject services and routes with 409/404/422 behaviour, tests and docs. No frontend, logging config or evals.
+**AI output:** `agent/failure_injection.py`, `agent/guardrails.py`, `services/approval.py`, two routes, `ApproveRequest`/`RejectRequest`, a `GuardrailViolationError`, a config setting, and 60 new tests.
+**Decisions and changes:**
+- Degraded runs are derived from `error` steps instead of a stored `warnings` list: no schema change and nothing to keep in sync. The cost is that any recovered error also shows the warning.
+- Failure demo candidate is `cand_priya` because her interview really has a date, so "the draft makes no date promise" is a real check.
+- Guardrail failure keeps the text in the `llm_message` step for debugging but leaves `draft_text` empty, so nothing approvable is stored.
+- I made the fence-tag strip a regex that also tolerates spaces (`</ untrusted_transcript >`), slightly beyond "case-insensitive".
+- The approval service has no status checks; it relies on `transition()` so 409s have one source.
+- Replaced the weak "does not invent compensation" test, which only checked that the default FakeLLM does not say "salary", with a scripted LLM that does say it and must fail the run. The old assertion is kept as a separate, honestly named test.
+- My first approval API test used a 2-character rejection reason and got 422 instead of 409; the test was wrong, not the code, so I changed the test.
+- Ruff asked for the `pydantic` import in `models.py` to be reformatted; applied.
+**Outcome:** Verified by running: 188 backend tests passed, ruff clean, and a real `curl` against uvicorn with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya`: two error steps, no date in the draft, `awaiting_approval`; `conv_tom` unaffected; approve edited 200; second approve 409; reject after approve 409; short reason 422; unknown run 404. Pending the user's review.
 
 <!-- Add new entries below. Format: number, title, prompt summary, AI output, outcome (accepted / modified / rejected, and why). -->

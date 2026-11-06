@@ -1,8 +1,12 @@
+import re
+
 from app.llm.base import ChatMessage
 from app.models import Conversation
 
 FENCE_OPEN = "<untrusted_transcript>"
 FENCE_CLOSE = "</untrusted_transcript>"
+# Case-insensitive and tolerant of spaces, so "</UNTRUSTED_TRANSCRIPT >" cannot close the fence.
+_FENCE_CLOSE_PATTERN = re.compile(r"</\s*untrusted_transcript\s*>", re.IGNORECASE)
 
 SYSTEM_PROMPT = (
     "You are an assistant that drafts replies for a recruiter to candidate messages. "
@@ -20,7 +24,7 @@ SYSTEM_PROMPT = (
 def build_messages(conversation: Conversation, instructions: str | None) -> list[ChatMessage]:
     # Strip the closing tag so a candidate cannot "break out" of the fence.
     transcript = "\n".join(
-        f"[{m.sender}] {m.text.replace(FENCE_CLOSE, '[removed]')}" for m in conversation.messages)
+        f"[{m.sender}] {_FENCE_CLOSE_PATTERN.sub('[removed]', m.text)}" for m in conversation.messages)
     user_text = (
         f"Conversation: {conversation.id}\n"
         f"Candidate ID: {conversation.candidate_id}\n"

@@ -1,6 +1,6 @@
 # Candidate Messaging Assistant
 
-> **Status: Steps 1-5 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API).** You can list conversations, create a draft (the agent runs synchronously with `FakeLLM`) and read runs and their steps over HTTP. There is no approve/reject, no guardrails, no injected failure and no UI yet. Unticked items under "Planned features" are plans, not working software.
+> **Status: Steps 1-6 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject).** The whole backend flow works over HTTP: list conversations, create a draft (the agent runs synchronously with `FakeLLM`), read the steps, approve or reject. There is no UI, JSON logging config or eval harness yet. Unticked items under "Planned features" are plans, not working software.
 
 ## Objective
 
@@ -16,17 +16,18 @@ Progress is tracked here. A box is ticked only after the item is implemented and
 - [ ] View seeded candidate conversations (UI; the `GET /api/conversations` endpoints are done, see below)
 - [ ] Ask the agent to draft a reply (UI; `POST /api/conversations/{id}/drafts` with optional instructions is done)
 - [x] Read/draft API with a uniform error envelope (`GET /api/conversations`, `GET /api/conversations/{id}`, `POST /api/conversations/{id}/drafts`, `GET /api/runs`, `GET /api/runs/{id}`); verified with tests and real `curl` calls
-- [x] Run state machine (one transition table, conditional write, `InvalidTransition` -> 409; approve/reject endpoints that use it are not built)
+- [x] Run state machine (one transition table, conditional write, `InvalidTransition` -> 409)
 - [x] Candidate-scoped tools (the LLM cannot read another candidate's data) and a fenced, untrusted transcript in the prompt
 - [x] Agent tools: `get_candidate`, `get_interview_status`, `get_job`
 - [x] Persistence for agent runs and steps (SQLite repository)
 - [x] Pydantic models and validated JSON fixtures (4 candidates, 3 jobs, 4 conversations)
 - [x] Persisted multi-step agent run (steps, status, draft): `run_agent` with `FakeLLM`, max 6 LLM calls, runs end `awaiting_approval` or `failed` (not yet reachable over HTTP)
-- [ ] Approve (optionally edited) or reject (reason required)
-- [ ] Injected tool failure with graceful degradation
+- [x] Approve (optionally edited) or reject (reason required) over the API (`POST /api/runs/{id}/approve|reject`); double approve, approve after reject and approving a failed run return 409; verified with tests and real `curl` calls (no UI yet)
+- [x] Injected tool failure with graceful degradation (backend: `INJECT_INTERVIEW_FAILURE_FOR=cand_priya`; verified with tests and a real `curl`; the UI warning is not built)
+- [x] Draft guardrails (non-empty, max 1200 characters, no placeholders, no compensation talk unless the recruiter asked); a violation fails the run and the draft is not stored
 - [ ] Execution history and trace view
 - [ ] Structured JSON logging with run ids
-- [ ] Tests: unit, data validation, integration, API, frontend, browser E2E (done so far: unit, data validation, integration for the data layer, tools and agent loop)
+- [ ] Tests: unit, data validation, integration, API, frontend, browser E2E (done so far: unit, data validation, integration and API tests; no frontend, E2E or eval tests yet)
 - [ ] Automated AI evaluation harness with pass threshold
 - [ ] GitHub Actions CI
 - [ ] Optional OpenAI client (not required to run anything)
@@ -73,7 +74,15 @@ curl http://localhost:8000/api/conversations
 curl -X POST http://localhost:8000/api/conversations/conv_priya/drafts \
   -H 'content-type: application/json' -d '{"instructions":"Keep it short"}'   # 201, includes steps
 curl "http://localhost:8000/api/runs?conversation_id=conv_priya"               # summaries, no steps
+curl -X POST http://localhost:8000/api/runs/<run_id>/approve \
+  -H 'content-type: application/json' -d '{"edited_text":"Optional edited text"}'   # body optional; 200
+curl -X POST http://localhost:8000/api/runs/<run_id>/reject \
+  -H 'content-type: application/json' -d '{"reason":"Too formal"}'              # reason 3-500 chars; 200
 ```
+
+A run that is already approved, rejected or failed cannot be decided again: the API answers `409 invalid_transition`.
+
+**Injected failure demo.** Start the backend with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya make backend`. Then `get_interview_status` always fails for Priya (conversation `conv_priya`; her real interview date is 2026-11-12). The run still ends `awaiting_approval`: two `error` steps (first one ends in "retrying") and a draft that promises no date. Every other candidate is normal; use `conv_tom` for the happy path. A UI can treat "any `error` step in the run" as the warning. The default is off.
 
 Errors always look like `{"error": {"code": "...", "message": "..."}}`. A run that fails (for example the LLM errors) is still returned with `201` and `"status": "failed"`.
 

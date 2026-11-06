@@ -24,7 +24,7 @@ class UnknownToolError(AppError):
 
 
 class ToolUnavailableError(AppError):
-    """A tool's backing system is down. Reserved for the injected failure in a later step."""
+    """A tool's backing system is down (raised by the injected failure wrapper)."""
 
     code = "tool_unavailable"
 
@@ -57,3 +57,9 @@ class TooManyToolCallsError(AppError):
 
 class ConfigurationError(AppError):
     code = "configuration_error"
+
+
+class GuardrailViolationError(AppError):
+    """The draft broke a rule in agent/guardrails.py; the run fails and the draft is discarded."""
+
+    code = "guardrail_violation"

@@ -63,3 +63,8 @@ def test_unexpected_exception_returns_500_envelope_without_traceback(client):
 
 def test_unknown_path_uses_envelope(client):
     assert_envelope(client.get("/api/nope"), 404, "not_found")
+
+
+def test_blank_instructions_are_stored_as_null(client):
+    run = client.post("/api/conversations/conv_priya/drafts", json={"instructions": "   "}).json()
+    assert run["instructions"] is None

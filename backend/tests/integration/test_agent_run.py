@@ -2,11 +2,12 @@
 import pytest
 
 from app.agent.loop import run_agent
+from app.llm.base import LLMResponse
+from app.llm.fake import FakeLLM
 from app.models import RunStatus, StepType
 
 
 def _run(store, repo, registry, conv):
-    from app.llm.fake import FakeLLM
     return run_agent(llm=FakeLLM(), tools=registry, repo=repo,
                      conversation=store.get_conversation(conv))
 
@@ -42,10 +43,22 @@ def test_each_fixture_conversation_produces_a_draft(store, repo, registry, conv,
     assert phrase in run.draft_text
 
 
-def test_draft_does_not_invent_compensation(store, repo, registry):
-    run = _run(store, repo, registry, "conv_tom")  # candidate asked about salary
+def test_draft_that_invents_compensation_fails_the_run(store, repo, registry):
+    # conv_tom asks about salary; a model that answers with a number must be stopped.
+    llm = FakeLLM([LLMResponse(content="Hi Tom, the salary for this role is 95k.")])
+    run = run_agent(llm=llm, tools=registry, repo=repo,
+                    conversation=store.get_conversation("conv_tom"))
+    assert run.status == RunStatus.FAILED
+    assert "compensation" in run.error
+    assert run.draft_text is None  # never stored as an approvable draft
+    assert [s.type for s in run.steps] == [StepType.LLM_MESSAGE, StepType.ERROR]
+    assert run.steps[1].error.startswith("guardrail_violation")
+
+
+def test_default_policy_draft_for_salary_question_mentions_no_compensation(store, repo, registry):
+    run = _run(store, repo, registry, "conv_tom")
+    assert run.status == RunStatus.AWAITING_APPROVAL
     assert "salary" not in run.draft_text.lower()
-    assert "£" not in run.draft_text
 
 
 def test_runs_are_listed_per_conversation(store, repo, registry):

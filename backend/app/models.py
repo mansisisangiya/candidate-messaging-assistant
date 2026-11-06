@@ -3,7 +3,14 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 # Ids are short slugs; restricting them keeps tool arguments from the LLM predictable.
 RecordId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,64}$")]
@@ -146,8 +153,36 @@ class RunSummary(_Model):
 
 # ---- API ----
 
+def _strip(value: object) -> object:
+    return value.strip() if isinstance(value, str) else value
+
+
 class DraftRequest(_Model):
     instructions: str | None = Field(default=None, max_length=500)
+
+    @field_validator("instructions", mode="before")
+    @classmethod
+    def _blank_is_none(cls, value: object) -> object:
+        value = _strip(value)
+        return value or None
+
+
+class ApproveRequest(_Model):
+    edited_text: str | None = Field(default=None, min_length=1, max_length=2000)
+
+    @field_validator("edited_text", mode="before")
+    @classmethod
+    def _strip_text(cls, value: object) -> object:
+        return _strip(value)  # whitespace-only becomes "" and fails min_length (422)
+
+
+class RejectRequest(_Model):
+    reason: str = Field(min_length=3, max_length=500)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _strip_reason(cls, value: object) -> object:
+        return _strip(value)
 
 
 class ConversationSummary(_Model):

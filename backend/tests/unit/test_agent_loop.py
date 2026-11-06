@@ -175,3 +175,18 @@ def test_exactly_the_maximum_number_of_tool_calls_is_allowed(store, repo, regist
     run = _run(store, repo, registry,
                FakeLLM([LLMResponse(tool_calls=calls), LLMResponse(content="Done")]))
     assert run.status == RunStatus.AWAITING_APPROVAL
+
+
+def test_guardrail_violation_fails_run_and_discards_draft(store, repo, registry):
+    run = _run(store, repo, registry, FakeLLM([LLMResponse(content="Hi [Name], welcome")]))
+    assert run.status == RunStatus.FAILED
+    assert run.draft_text is None
+    assert "placeholder" in run.error
+    assert _types(run) == [StepType.LLM_MESSAGE, StepType.ERROR]
+    assert repo.get_run(run.id).draft_text is None
+
+
+def test_compensation_allowed_when_recruiter_instructions_mention_it(store, repo, registry):
+    llm = FakeLLM([LLMResponse(content="Happy to discuss salary on a call.")])
+    run = _run(store, repo, registry, llm, instructions="Offer to discuss salary")
+    assert run.status == RunStatus.AWAITING_APPROVAL

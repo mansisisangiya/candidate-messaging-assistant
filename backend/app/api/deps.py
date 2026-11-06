@@ -12,6 +12,7 @@ from app.data.store import FixtureStore
 from app.db.repo import RunRepository
 from app.llm.base import LLMClient
 from app.llm.factory import create_llm
+from app.services.approval import ApprovalService
 from app.services.drafting import DraftingService
 
 
@@ -38,5 +39,10 @@ RepoDep = Annotated[RunRepository, Depends(get_repo)]
 
 
 def get_drafting_service(store: StoreDep, repo: RepoDep,
-                         llm: Annotated[LLMClient, Depends(get_llm)]) -> DraftingService:
-    return DraftingService(store, repo, llm)
+                         llm: Annotated[LLMClient, Depends(get_llm)],
+                         settings: Annotated[Settings, Depends(get_settings)]) -> DraftingService:
+    return DraftingService(store, repo, llm, settings.inject_interview_failure_for)
+
+
+def get_approval_service(repo: RepoDep) -> ApprovalService:
+    return ApprovalService(repo)

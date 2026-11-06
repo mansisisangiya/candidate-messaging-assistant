@@ -9,10 +9,12 @@ import time
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from app.agent.guardrails import validate_draft
 from app.agent.prompt import build_messages
 from app.db.repo import RunRepository
 from app.errors import (
     AppError,
+    GuardrailViolationError,
     LLMError,
     MaxStepsExceededError,
     ToolUnavailableError,
@@ -58,7 +60,8 @@ def run_agent(
     log = {"run_id": run.id}
     logger.info("run started", extra=log)
     try:
-        draft = _loop(llm, tools, _Recorder(repo, run.id), build_messages(conversation, instructions))
+        draft = _loop(llm, tools, _Recorder(repo, run.id),
+                      build_messages(conversation, instructions), instructions)
     except Exception as exc:
         message = exc.message if isinstance(exc, AppError) else "Unexpected internal error"
         if not isinstance(exc, AppError):
@@ -70,7 +73,7 @@ def run_agent(
 
 
 def _loop(llm: LLMClient, tools: ToolExecutor, recorder: _Recorder,
-          messages: list[ChatMessage]) -> str:
+          messages: list[ChatMessage], instructions: str | None) -> str:
     for _ in range(MAX_STEPS):
         response = llm.complete(messages, tools.schemas())
         if len(response.tool_calls) > MAX_TOOL_CALLS_PER_RESPONSE:
@@ -87,8 +90,19 @@ def _loop(llm: LLMClient, tools: ToolExecutor, recorder: _Recorder,
         if not draft:
             raise LLMError("LLM returned neither tool calls nor a draft")
         recorder.record(StepType.LLM_MESSAGE, output={"text": draft})
+        _enforce_guardrails(recorder, draft, instructions)
         return draft
     raise MaxStepsExceededError(f"No draft produced after {MAX_STEPS} LLM calls")
+
+
+def _enforce_guardrails(recorder: _Recorder, draft: str, instructions: str | None) -> None:
+    """A draft that breaks a rule fails the run. The text stays in the trace (llm_message step)
+    for debugging, but is never stored as the run's approvable draft."""
+    violations = validate_draft(draft, instructions)
+    if violations:
+        message = "; ".join(violations)
+        recorder.record(StepType.ERROR, error=f"{GuardrailViolationError.code}: {message}")
+        raise GuardrailViolationError(message)
 
 
 def _run_tool(tools: ToolExecutor, recorder: _Recorder, call: ToolCall) -> ChatMessage:

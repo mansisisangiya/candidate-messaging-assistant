@@ -2,16 +2,19 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import RepoDep, StoreDep, get_drafting_service
+from app.api.deps import RepoDep, StoreDep, get_approval_service, get_drafting_service
 from app.config import Settings, get_settings
 from app.models import (
     AgentRun,
+    ApproveRequest,
     ConversationDetail,
     ConversationSummary,
     DraftRequest,
+    RejectRequest,
     RunSummary,
 )
 from app.services import queries
+from app.services.approval import ApprovalService
 from app.services.drafting import DraftingService
 
 router = APIRouter(prefix="/api")
@@ -51,3 +54,21 @@ def list_runs(repo: RepoDep, conversation_id: Annotated[str | None, Query()] = N
 @router.get("/runs/{run_id}")
 def get_run(run_id: str, repo: RepoDep) -> AgentRun:
     return queries.get_run(repo, run_id)
+
+
+@router.post("/runs/{run_id}/approve")
+def approve_run(
+    run_id: str,
+    service: Annotated[ApprovalService, Depends(get_approval_service)],
+    body: ApproveRequest | None = None,
+) -> AgentRun:
+    return service.approve(run_id, body.edited_text if body else None)
+
+
+@router.post("/runs/{run_id}/reject")
+def reject_run(
+    run_id: str,
+    body: RejectRequest,
+    service: Annotated[ApprovalService, Depends(get_approval_service)],
+) -> AgentRun:
+    return service.reject(run_id, body.reason)

@@ -36,3 +36,26 @@ def test_message_requires_text_and_valid_sender():
 def test_record_ids_are_restricted(bad_id):
     with pytest.raises(ValidationError):
         GetCandidateInput(candidate_id=bad_id)
+
+
+def test_draft_request_strips_and_blank_becomes_none():
+    from app.models import DraftRequest
+    assert DraftRequest(instructions="  be brief  ").instructions == "be brief"
+    assert DraftRequest(instructions="   ").instructions is None
+    assert DraftRequest(instructions="").instructions is None
+
+
+def test_approve_and_reject_requests_strip_and_validate():
+    from app.models import ApproveRequest, RejectRequest
+    assert ApproveRequest().edited_text is None
+    assert ApproveRequest(edited_text="  Hi  ").edited_text == "Hi"
+    assert RejectRequest(reason="  too pushy ").reason == "too pushy"
+    for bad in ("", "   "):
+        with pytest.raises(ValidationError):
+            ApproveRequest(edited_text=bad)
+    with pytest.raises(ValidationError):
+        ApproveRequest(edited_text="x" * 2001)
+    with pytest.raises(ValidationError):
+        RejectRequest(reason="  a ")
+    with pytest.raises(ValidationError):
+        RejectRequest(reason="x" * 501)

@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_origins: str = "http://localhost:5173"
     database_path: str = "data/app.db"  # mutable run state; git-ignored (*.db)
+    # Demo/E2E switch: for this candidate id, get_interview_status always fails. Empty = off.
+    inject_interview_failure_for: str = ""
 
 
 @lru_cache
