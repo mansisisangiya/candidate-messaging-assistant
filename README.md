@@ -6,13 +6,16 @@ An AI-powered assistant that helps a recruiter respond to candidates. A recruite
 
 Built as an engineering assessment to demonstrate: an agent that calls tools, state across steps, a backend API with a simple frontend, human approval, error handling with an injected failure, a layered test suite, an AI evaluation harness, logging and execution history, CI, and documentation.
 
-> **Status: Steps 1-9 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject, 7 eval harness and JSON logging, 8 minimal frontend and Playwright E2E, 9 cleanup, eval criteria and documentation).** The full flow (list conversations, draft with `FakeLLM`, read the trace, approve or reject) works in the API and in a deliberately plain UI (no UI library, router or state library). Verified by backend and frontend tests and two Playwright tests; CI has not run on GitHub yet. Unticked items in the checklist are not done.
+> **Status: Steps 1-9 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject, 7 eval harness and JSON logging, 8 minimal frontend and Playwright E2E, 9 cleanup, eval criteria and documentation).** The full flow (list conversations, draft with `FakeLLM`, read the trace, approve or reject) works in the API and in a deliberately plain UI (no UI library, router or state library). Verified by backend and frontend tests and two Playwright tests; the backend, frontend and e2e jobs of the GitHub Actions workflow passed in [one CI run](https://github.com/mansisisangiya/candidate-messaging-assistant/actions/runs/42278166770) on commit `6b8cc22`. Unticked items in the checklist are not done.
 
 Known limitations and the auth decision are listed under Limitations and Authentication below.
 
 ## Demo
 
 ![Draft panel with trace](docs/screenshots/draft-panel.png)
+
+![Injected failure: warning banner, two red error steps and a draft without a date](docs/screenshots/injected-failure.png)
+*Injected failure: the warning banner, two red error steps, and a draft that makes no date promise*
 
 ## Quick start
 
@@ -68,7 +71,7 @@ Progress is tracked here. A box is ticked only after the item is implemented and
 - [x] Structured JSON logging with run ids (stdlib, `run_id` via a context variable; checked in tests and in the output of a real uvicorn run)
 - [x] Tests: unit, data validation, integration, API, frontend component, browser E2E and eval harness (231 backend, 20 frontend, 2 Playwright; real output in [docs/reports/test-report.md](docs/reports/test-report.md), strategy in docs/TEST_STRATEGY.md)
 - [x] Automated AI evaluation harness with pass threshold (`make eval`: 14 cases labelled by criterion (task completion, groundedness, relevance, tool accuracy, safety, failure handling), default threshold 1.0, `--repeat N` for variance; runs against `FakeLLM`, so it checks the pipeline, not model quality)
-- [ ] GitHub Actions CI (workflow written with backend, frontend and e2e jobs; it has never run on GitHub, so this stays unticked)
+- [x] GitHub Actions CI (the `backend`, `frontend` and `e2e` jobs passed in [this run](https://github.com/mansisisangiya/candidate-messaging-assistant/actions/runs/42278166770) on commit `6b8cc22`; an earlier run on `5aa0b2f` had failed because CI used Node 20 while the frontend dependencies need Node 22 or newer, fixed in `6b8cc22`. Only that one passing run is verified)
 - [ ] Optional OpenAI client (not required to run anything)
 
 ## Technology
@@ -88,6 +91,9 @@ Python 3.12, FastAPI, Pydantic, SQLite, React + TypeScript (Vite), pytest, Vites
 
 ## API usage and demos
 
+![Swagger UI at /docs listing the API endpoints](docs/screenshots/api-docs.png)
+*Swagger UI at /docs*
+
 Try the API (run state is stored in `backend/data/app.db`, git-ignored):
 
 ```bash
@@ -100,6 +106,9 @@ curl -X POST http://localhost:8000/api/runs/<run_id>/approve \
 curl -X POST http://localhost:8000/api/runs/<run_id>/reject \
   -H 'content-type: application/json' -d '{"reason":"Too formal"}'              # reason 3-500 chars; 200
 ```
+
+![Terminal output of POST /api/conversations/conv_priya/drafts with the trace steps](docs/screenshots/api-curl-draft.png)
+*Real response of POST /api/conversations/conv_priya/drafts (trace steps included)*
 
 A run that is already approved, rejected or failed cannot be decided again: the API answers `409 invalid_transition`.
 
@@ -114,6 +123,9 @@ Configuration is via environment variables; see `.env.example` (copy to `backend
 ## Testing and evals
 
 **E2E tests.** `make e2e` runs two Playwright tests in Chromium. The config starts its own backends (temporary SQLite files, `LLM_PROVIDER=fake`) and Vite servers on ports 8100/5174 and 8101/5175, so it never touches `backend/data/` or servers you have running. The first test selects Priya, drafts, checks the trace, approves and sees "approved". The second runs against a backend started with `INJECT_INTERVIEW_FAILURE_FOR=cand_priya` and checks the warning banner and the two error steps. On failure it keeps a screenshot and trace in `frontend/test-results/`.
+
+![The UI showing a validation message for a rejection reason that is too short](docs/screenshots/reject-validation.png)
+*UI validation: reject needs a reason of at least 3 characters*
 
 Tests and checks (`make test`, `make eval` and `make e2e` are in the [Quick start](#quick-start)):
 
@@ -180,7 +192,7 @@ A real deployment would add authentication and per-recruiter authorization on co
 - Guardrails are regex and keyword checks (a paraphrased salary mention would get through); the relevance eval is a keyword proxy.
 - No authentication or authorization (see above).
 - If the write to the `failed` state itself fails, the run stays in `running`.
-- CI is written but has not run on GitHub yet; no deploy, smoke-test, nightly or live-eval workflow exists.
+- CI passed in one GitHub Actions run ([link](https://github.com/mansisisangiya/candidate-messaging-assistant/actions/runs/42278166770), commit `6b8cc22`); no deploy, smoke-test, nightly or live-eval workflow exists.
 
 ## Out of scope
 

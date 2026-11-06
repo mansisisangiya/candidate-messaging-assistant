@@ -1,6 +1,6 @@
 # Test Strategy
 
-> **Status: all layers implemented** (unit, data validation, integration, API, frontend component, browser E2E, eval harness) and run locally; the CI workflow has not run on GitHub yet. Results are recorded only after they are actually run.
+> **Status: all layers implemented** (unit, data validation, integration, API, frontend component, browser E2E, eval harness) and run locally; the CI workflow passed in [one GitHub Actions run](https://github.com/mansisisangiya/candidate-messaging-assistant/actions/runs/42278166770) on commit `6b8cc22` (jobs `backend`, `frontend`, `e2e`). Results are recorded only after they are actually run.
 
 ## Principles
 
@@ -35,7 +35,7 @@
 
 | When | Checks | Exists in `.github/workflows` today? |
 |---|---|---|
-| Every push and pull request | `ruff`; `tsc` (app and e2e code); pytest (unit, data validation, integration, API, plus the eval-harness tests); Vitest; FakeLLM eval at threshold 1.0 (`python -m evals.run`); frontend build; Playwright E2E (2 tests) | **Yes**, in `ci.yml` (jobs `backend`, `frontend`, `e2e`). Written and run locally only; it has not run on GitHub yet |
+| Every push and pull request | `ruff`; `tsc` (app and e2e code); pytest (unit, data validation, integration, API, plus the eval-harness tests); Vitest; FakeLLM eval at threshold 1.0 (`python -m evals.run`); frontend build; Playwright E2E (2 tests) | **Yes**, in `ci.yml` (jobs `backend`, `frontend`, `e2e`). Passed in [one GitHub Actions run](https://github.com/mansisisangiya/candidate-messaging-assistant/actions/runs/42278166770) on commit `6b8cc22` (an earlier run failed because CI used Node 20; fixed by moving to Node 22) |
 | Deployment or release | Everything above, plus a smoke test of the deployed API (`GET /api/health` returns `{"status":"ok"}`) and one E2E test against the deployed stack | **No.** Described only: there is no deployment, so there is no deploy workflow or smoke test |
 | Scheduled regression (nightly) | Full suite; a live-model eval with `--repeat 5` and a lower threshold (for example 0.8), with results stored per run to spot model or prompt regressions over time | **No.** Described only: there is no live provider client (the OpenAI client is not built), no schedule and no results store |
 
@@ -60,7 +60,7 @@
 
 ## CI plan (GitHub Actions)
 
-- `backend`: ruff, pytest, fake-LLM eval (`python -m evals.run`; step added in Step 7, workflow not yet run on GitHub)
+- `backend`: ruff, pytest, fake-LLM eval (`python -m evals.run`; step added in Step 7, workflow passed in [one GitHub run](https://github.com/mansisisangiya/candidate-messaging-assistant/actions/runs/42278166770) on commit `6b8cc22`)
 - `frontend`: tsc, vitest, build
 - `e2e`: depends on both; installs Playwright Chromium, runs both Playwright tests, uploads the report on failure
 

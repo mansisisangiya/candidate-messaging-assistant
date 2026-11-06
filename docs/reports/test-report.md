@@ -1,6 +1,6 @@
 # Test report
 
-Generated 2026-11-07 00:24 IST by running the commands below from the repository root. The output is filtered to the summary lines by a script and pasted unedited. Everything runs against `FakeLLM`, with no network and no API key. CI has not run on GitHub yet, so this is a local run.
+Generated 2026-11-07 00:24 IST by running the commands below from the repository root. The output is filtered to the summary lines by a script and pasted unedited. Everything runs against `FakeLLM`, with no network and no API key. This report is from a local run; the CI workflow passed separately in [one GitHub Actions run](https://github.com/mansisisangiya/candidate-messaging-assistant/actions/runs/42278166770) on commit `6b8cc22`.
 
 ## `make test-backend (pytest)`  (exit code 0)
 
