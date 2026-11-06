@@ -126,3 +126,40 @@ class AgentRun(_Model):
     error: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class RunSummary(_Model):
+    """A run without its steps, for lists."""
+
+    id: str
+    conversation_id: RecordId
+    status: RunStatus
+    instructions: str | None = None
+    draft_text: str | None = None
+    final_text: str | None = None
+    rejection_reason: str | None = None
+    error: str | None = None
+    step_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---- API ----
+
+class DraftRequest(_Model):
+    instructions: str | None = Field(default=None, max_length=500)
+
+
+class ConversationSummary(_Model):
+    id: str
+    candidate_name: str
+    job_title: str
+    last_message_preview: str
+    latest_run_status: RunStatus | None = None
+
+
+class ConversationDetail(_Model):
+    conversation: Conversation
+    candidate: Candidate
+    job: Job
+    latest_run: AgentRun | None = None

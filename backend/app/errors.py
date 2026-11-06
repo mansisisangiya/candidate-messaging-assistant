@@ -43,3 +43,17 @@ class LLMError(AppError):
 
 class MaxStepsExceededError(AppError):
     code = "max_steps_exceeded"
+
+
+class InvalidTransition(AppError):
+    """A run status change that the state machine does not allow (HTTP 409)."""
+
+    code = "invalid_transition"
+
+
+class TooManyToolCallsError(AppError):
+    code = "too_many_tool_calls"
+
+
+class ConfigurationError(AppError):
+    code = "configuration_error"

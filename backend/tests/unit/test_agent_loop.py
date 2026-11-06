@@ -1,5 +1,5 @@
 """Agent loop behaviour with scripted FakeLLM responses and a real temp SQLite database."""
-from app.agent.loop import MAX_STEPS, run_agent
+from app.agent.loop import MAX_STEPS, MAX_TOOL_CALLS_PER_RESPONSE, run_agent
 from app.errors import LLMError, ToolUnavailableError
 from app.llm.base import LLMResponse, ToolCall
 from app.llm.fake import FakeLLM
@@ -83,7 +83,9 @@ def test_unavailable_tool_is_retried_once(store, repo):
                    LLMResponse(content="Done")])
     run = _run(store, repo, tools, llm)
     assert tools.attempts == 2
-    assert StepType.ERROR not in _types(run)
+    assert _types(run) == [StepType.TOOL_CALL, StepType.ERROR, StepType.TOOL_RESULT,
+                           StepType.LLM_MESSAGE]
+    assert run.steps[1].error == "tool_unavailable: interview system down, retrying"
 
 
 def test_unavailable_tool_after_retry_is_error_step_and_run_continues(store, repo):
@@ -93,7 +95,9 @@ def test_unavailable_tool_after_retry_is_error_step_and_run_continues(store, rep
     run = _run(store, repo, tools, llm)
     assert tools.attempts == 2  # one try plus exactly one retry
     assert run.status == RunStatus.AWAITING_APPROVAL
-    assert run.steps[1].type == StepType.ERROR
+    assert [s.type for s in run.steps[:3]] == [StepType.TOOL_CALL, StepType.ERROR, StepType.ERROR]
+    assert run.steps[1].error.endswith("retrying")
+    assert not run.steps[2].error.endswith("retrying")
 
 
 def test_max_steps_marks_run_failed(store, repo, registry):
@@ -135,3 +139,39 @@ def test_instructions_are_persisted(store, repo, registry):
     run = _run(store, repo, registry, FakeLLM([LLMResponse(content="Hi")]),
                instructions="Keep it short")
     assert repo.get_run(run.id).instructions == "Keep it short"
+
+
+class CrashingTools:
+    def schemas(self):
+        return []
+
+    def execute(self, name, raw_args):
+        raise RuntimeError("secret internal detail")
+
+
+def test_non_app_error_in_a_tool_is_recorded_and_run_continues(store, repo):
+    llm = FakeLLM([_call("get_job", job_id="job_data"), LLMResponse(content="Done")])
+    run = _run(store, repo, CrashingTools(), llm)
+    assert run.status == RunStatus.AWAITING_APPROVAL
+    assert run.steps[1].type == StepType.ERROR
+    assert run.steps[1].error == "tool_failed: The tool failed unexpectedly"
+    assert "secret" not in run.steps[1].error
+
+
+def test_too_many_tool_calls_in_one_response_fails_the_run(store, repo):
+    flaky = FlakyTools(failures=0)
+    calls = [ToolCall(id=f"c{i}", name="get_job", arguments={"job_id": "job_data"})
+             for i in range(MAX_TOOL_CALLS_PER_RESPONSE + 1)]
+    run = _run(store, repo, flaky, FakeLLM([LLMResponse(tool_calls=calls)]))
+    assert run.status == RunStatus.FAILED
+    assert "5 tool calls in one response (maximum 4)" in run.error
+    assert flaky.attempts == 0  # nothing was executed
+    assert run.steps == []
+
+
+def test_exactly_the_maximum_number_of_tool_calls_is_allowed(store, repo, registry):
+    calls = [ToolCall(id=f"c{i}", name="get_job", arguments={"job_id": "job_data"})
+             for i in range(MAX_TOOL_CALLS_PER_RESPONSE)]
+    run = _run(store, repo, registry,
+               FakeLLM([LLMResponse(tool_calls=calls), LLMResponse(content="Done")]))
+    assert run.status == RunStatus.AWAITING_APPROVAL

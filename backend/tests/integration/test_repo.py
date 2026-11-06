@@ -38,8 +38,8 @@ def test_error_step_is_persisted(repo):
 
 def test_update_run(repo):
     run = repo.create_run("conv_priya")
-    updated = repo.update_run(run.id, status=RunStatus.AWAITING_APPROVAL, draft_text="Hello")
-    assert updated.status == RunStatus.AWAITING_APPROVAL
+    updated = repo.update_run(run.id, draft_text="Hello")
+    assert updated.status == RunStatus.RUNNING
     assert updated.draft_text == "Hello"
     assert updated.updated_at >= run.updated_at
 
@@ -48,6 +48,8 @@ def test_update_run_rejects_unknown_or_empty_fields(repo):
     run = repo.create_run("conv_priya")
     with pytest.raises(ValueError):
         repo.update_run(run.id, id="other")
+    with pytest.raises(ValueError):  # status changes only through update_status_if
+        repo.update_run(run.id, status="approved")
     with pytest.raises(ValueError):
         repo.update_run(run.id)
 
@@ -58,7 +60,7 @@ def test_missing_run_raises_not_found(repo):
     with pytest.raises(RecordNotFoundError):
         repo.add_step("nope", _step(0))
     with pytest.raises(RecordNotFoundError):
-        repo.update_run("nope", status="failed")
+        repo.update_run("nope", error="x")
 
 
 def test_duplicate_step_index_is_rejected_and_rolled_back(repo):

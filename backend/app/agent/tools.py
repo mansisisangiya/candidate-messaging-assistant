@@ -56,3 +56,24 @@ class ToolRegistry:
             raise ToolInputError(f"Invalid arguments for {name}: {exc.errors()[0]['msg']} "
                                  f"({exc.errors()[0]['loc']})") from exc
         return tool.run(args).model_dump(mode="json")
+
+
+class CandidateScopedTools:
+    """Wraps a registry so tools can only read the candidate of the current conversation.
+
+    The LLM chooses tool arguments, and a prompt-injected transcript could make it ask about
+    someone else. Enforcing the scope here, in code, does not depend on the model behaving.
+    """
+
+    def __init__(self, registry: ToolRegistry, candidate_id: str) -> None:
+        self._registry = registry
+        self._candidate_id = candidate_id
+
+    def schemas(self) -> list[dict[str, Any]]:
+        return self._registry.schemas()
+
+    def execute(self, name: str, raw_args: dict[str, Any]) -> dict[str, Any]:
+        requested = raw_args.get("candidate_id")
+        if requested is not None and requested != self._candidate_id:
+            raise ToolInputError("candidate_id must be the candidate of this conversation")
+        return self._registry.execute(name, raw_args)

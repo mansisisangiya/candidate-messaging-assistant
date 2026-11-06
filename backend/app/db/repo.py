@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.errors import RecordNotFoundError
-from app.models import AgentRun, AgentStep, RunStatus
+from app.models import AgentRun, AgentStep, RunStatus, RunSummary
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -42,8 +42,9 @@ CREATE TABLE IF NOT EXISTS steps (
 CREATE INDEX IF NOT EXISTS idx_runs_conversation ON runs(conversation_id, created_at);
 """
 
-# Columns update_run may change. Status transition rules live in the service layer.
-_UPDATABLE = {"status", "draft_text", "final_text", "rejection_reason", "error"}
+# Columns that may be written alongside a status change or on their own.
+# Status itself is NOT here: it changes only via update_status_if, called by services/run_state.py.
+_UPDATABLE = {"draft_text", "final_text", "rejection_reason", "error"}
 
 
 def _now() -> str:
@@ -99,9 +100,8 @@ class RunRepository:
             conn.execute("UPDATE runs SET updated_at = ? WHERE id = ?", (_now(), run_id))
 
     def update_run(self, run_id: str, **fields: str | None) -> AgentRun:
-        unknown = set(fields) - _UPDATABLE
-        if not fields or unknown:
-            raise ValueError(f"cannot update fields: {sorted(unknown)}")
+        """Update non-status columns."""
+        self._check_fields(fields, allow_empty=False)
         assignments = ", ".join(f"{name} = ?" for name in fields)
         with self._connect() as conn:
             self._require_run(conn, run_id)
@@ -111,6 +111,28 @@ class RunRepository:
             )
         return self.get_run(run_id)
 
+    def update_status_if(
+        self, run_id: str, expected: RunStatus, new: RunStatus, **fields: str | None
+    ) -> bool:
+        """Conditional write: change status (and fields) only if the row still has `expected`.
+
+        Returns False when no row matched, i.e. the caller's view of the run was stale.
+        """
+        self._check_fields(fields, allow_empty=True)
+        assignments = "".join(f", {name} = ?" for name in fields)
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"UPDATE runs SET status = ?{assignments}, updated_at = ? WHERE id = ? AND status = ?",
+                (new, *fields.values(), _now(), run_id, expected),
+            )
+        return cursor.rowcount == 1
+
+    @staticmethod
+    def _check_fields(fields: dict[str, str | None], *, allow_empty: bool) -> None:
+        unknown = set(fields) - _UPDATABLE
+        if unknown or (not fields and not allow_empty):
+            raise ValueError(f"cannot update fields: {sorted(unknown)}")
+
     def get_run(self, run_id: str) -> AgentRun:
         with self._connect() as conn:
             row = self._require_run(conn, run_id)
@@ -118,6 +140,17 @@ class RunRepository:
                 "SELECT * FROM steps WHERE run_id = ? ORDER BY idx", (run_id,)
             ).fetchall()
         return self._to_run(row, step_rows)
+
+    def list_run_summaries(self, conversation_id: str | None = None) -> list[RunSummary]:
+        """Newest first, without loading step rows."""
+        where, params = ("WHERE r.conversation_id = ?", (conversation_id,)) if conversation_id \
+            else ("", ())
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT r.*, (SELECT COUNT(*) FROM steps s WHERE s.run_id = r.id) AS step_count"
+                f" FROM runs r {where} ORDER BY r.created_at DESC, r.rowid DESC", params
+            ).fetchall()
+        return [RunSummary(**dict(row)) for row in rows]
 
     def list_runs(self, conversation_id: str | None = None) -> list[AgentRun]:
         query, params = "SELECT id FROM runs", ()

@@ -1,6 +1,6 @@
 # Candidate Messaging Assistant
 
-> **Status: Steps 1-3 complete (scaffolding, data layer and tools, FakeLLM and agent loop).** The backend can run the agent against the fixtures and persist a draft run with its steps, but there is no HTTP endpoint for it, no approval workflow and no UI yet. Verified by tests only, not through the API. Unticked items under "Planned features" are plans, not working software.
+> **Status: Steps 1-5 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API).** You can list conversations, create a draft (the agent runs synchronously with `FakeLLM`) and read runs and their steps over HTTP. There is no approve/reject, no guardrails, no injected failure and no UI yet. Unticked items under "Planned features" are plans, not working software.
 
 ## Objective
 
@@ -13,10 +13,13 @@ Built as an engineering assessment to demonstrate: an agent that calls tools, st
 Progress is tracked here. A box is ticked only after the item is implemented and verified by running it.
 
 - [x] Project scaffolding (FastAPI + health endpoint, React/Vite/TS, pytest, Vitest, Makefile, CI workflow)
-- [ ] View seeded candidate conversations
-- [ ] Ask the agent to draft a reply (with optional recruiter instructions)
-- [x] Agent tools: `get_candidate`, `get_interview_status`, `get_job` (tools only; the agent loop that calls them is not built)
-- [x] Persistence for agent runs and steps (SQLite repository; the run lifecycle and agent loop are not built)
+- [ ] View seeded candidate conversations (UI; the `GET /api/conversations` endpoints are done, see below)
+- [ ] Ask the agent to draft a reply (UI; `POST /api/conversations/{id}/drafts` with optional instructions is done)
+- [x] Read/draft API with a uniform error envelope (`GET /api/conversations`, `GET /api/conversations/{id}`, `POST /api/conversations/{id}/drafts`, `GET /api/runs`, `GET /api/runs/{id}`); verified with tests and real `curl` calls
+- [x] Run state machine (one transition table, conditional write, `InvalidTransition` -> 409; approve/reject endpoints that use it are not built)
+- [x] Candidate-scoped tools (the LLM cannot read another candidate's data) and a fenced, untrusted transcript in the prompt
+- [x] Agent tools: `get_candidate`, `get_interview_status`, `get_job`
+- [x] Persistence for agent runs and steps (SQLite repository)
 - [x] Pydantic models and validated JSON fixtures (4 candidates, 3 jobs, 4 conversations)
 - [x] Persisted multi-step agent run (steps, status, draft): `run_agent` with `FakeLLM`, max 6 LLM calls, runs end `awaiting_approval` or `failed` (not yet reachable over HTTP)
 - [ ] Approve (optionally edited) or reject (reason required)
@@ -62,6 +65,17 @@ make frontend       # Vite on http://localhost:5173 (proxies /api to :8000)
 ```
 
 Check the backend: `curl http://localhost:8000/api/health` returns `{"status":"ok","llm_provider":"fake"}`.
+
+Try the API (run state is stored in `backend/data/app.db`, git-ignored):
+
+```bash
+curl http://localhost:8000/api/conversations
+curl -X POST http://localhost:8000/api/conversations/conv_priya/drafts \
+  -H 'content-type: application/json' -d '{"instructions":"Keep it short"}'   # 201, includes steps
+curl "http://localhost:8000/api/runs?conversation_id=conv_priya"               # summaries, no steps
+```
+
+Errors always look like `{"error": {"code": "...", "message": "..."}}`. A run that fails (for example the LLM errors) is still returned with `201` and `"status": "failed"`.
 
 Tests and checks:
 
