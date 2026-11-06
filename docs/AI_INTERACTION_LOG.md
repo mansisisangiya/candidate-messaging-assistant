@@ -123,6 +123,34 @@ Note: the session switched models between entries 1 and 2 (Opus 5.5 for planning
 - Rejected/not done: a run-history list in the UI. The brief asked for the trace of the latest run, which is what exists, so I split the README item and left history unticked rather than tick something the UI does not do.
 - A first selector in the E2E (`getByRole("textbox", { name: /draft/i })`) would have matched the instructions box too; I used the draft box's full label. In the App test I removed a click that would have rendered the detail view from the wrong mocked shape.
 - Playwright can only be proven useful if it can fail: I broke an assertion on purpose, saw the failure with a screenshot, trace and error context saved, and restored it.
-**Outcome:** Verified by running: 216 backend and 20 frontend tests passed, ruff and `tsc` clean, `make build` ok, `make e2e` 2 passed; the screenshot in `docs/screenshots/draft-panel.png` was captured by the E2E test. Pending the user's review.
+**Outcome:** Verified by running: 216 backend and 20 frontend tests passed, ruff and `tsc` clean, `make build` ok, `make e2e` 2 passed; the screenshot in `docs/screenshots/draft-panel.png` was captured by the E2E test. Accepted and committed as `2b2dd88` after the entry 12 cleanup.
+
+## 11. Independent code reviews (summary of what each found)
+The user relayed findings from reviews of my work after Steps 4, 5, 7 and 8. Real findings only; what was accepted or changed is recorded in the entries named.
+| Review of | Finding | Outcome |
+|---|---|---|
+| Step 4 (loop) | The first `ToolUnavailableError` was retried silently; a non-`AppError` in a tool failed the whole run; no cap on tool calls per response; the transcript was not fenced as untrusted | All accepted and fixed in Step 5 (entry 6). I also added stripping of a closing fence tag, which the review did not ask for |
+| Step 4/5 | The LLM chose `candidate_id` freely, so a prompt-injected transcript could read another candidate | Accepted: tools are scoped to the conversation's candidate in code (entry 6). `get_job` is deliberately not scoped |
+| Step 5 | The fence strip was case-sensitive; blank `instructions` were stored as text; a failure inside the `failed` transition leaves a run in `running` | Fence strip made case-insensitive (and space-tolerant), blank instructions stored as null, the last one documented as a known limitation (entry 7) |
+| Step 6 | A weak test ("does not invent compensation") only checked that the default fake did not say "salary" | Rewritten with a scripted LLM that does say it (entry 7) |
+| Step 7 | The eval was not hermetic: `Settings` still read the environment and `backend/.env`, so `INJECT_INTERVIEW_FAILURE_FOR=cand_priya` made it fail 8/10 | Accepted and reproduced with tests first, then fixed (entry 9) |
+| Step 7 | The default threshold of 0.9 lets one real regression through with a deterministic fake; my "kept your default" was not a rationale | Changed to 1.0 with the reasoning written down (entry 9) |
+| Step 7 (mine) | My report said the real eval output was in the README but the block was empty | Admitted and fixed (entry 9) |
+| Step 8 | Stale README/ARCHITECTURE/TEST_STRATEGY wording; the E2E code was not type-checked; `make e2e` prerequisites were undocumented | Accepted and fixed in Step 9 part A (entry 12) |
+| Brief for the eval | The eval cases were not labelled by task completion, groundedness, relevance, tool accuracy, safety and failure handling | Accepted and done in Step 9 part B (entry 12) |
+
+## 12. Step 9: cleanup, eval criteria and required documentation
+**Model:** Sonnet 5.5
+**Prompt (summary):** Three parts, each its own commit: (A) fix stale wording, type-check the E2E code, document `make e2e` prerequisites, commit Step 8; (B) label every eval case with one of six criteria, add `grounded_in_tools`, `addresses_topic` and `tool_calls` checks, new cases (prompt injection, malformed arguments, LLM error), a per-criterion table and `--repeat N`; (C) document which checks run when, non-determinism, risk-based layers, design decisions, auth, limitations, next steps, and save real reports. No product features, no backend behaviour changes.
+**Decisions and changes:**
+- Part A: `@types/node@20` conflicted with a peer dependency, so I used `@types/node@22` (types only; CI runs Node 20). Type-checking the E2E code found a real error in `playwright.config.ts` (an optional `env` value); I fixed it with an explicit return type, not `any`.
+- Part B: 14 cases (the cap), so I dropped the "salary allowed by instructions" eval case; the guardrail unit and loop tests still cover it. The injection case needs a transcript no fixture has, so a case may append a `candidate_message`; the harness copies the fixtures to a temp directory instead of changing the real data.
+- The ungrounded-draft expectation is tested as a unit test of the check function and as a harness run that exits non-zero, because a case file cannot express "this should fail".
+- `addresses_topic` is a keyword proxy, and the relevance case uses a scripted deferral because the default FakeLLM never writes one; both limits are written in the docs.
+- With `--repeat`, the pass rate counts every run, so one flaky run lowers it and fails at threshold 1.0.
+- My first draft of the repeat feature reused one temp directory name per case and crashed on the second repetition (found by the test); each run now gets its own directory.
+- A removed-scoping mutation test confirms the injection and scoping cases really fail when the protection is gone.
+- Part C: the "which checks run when" table says plainly that only `ci.yml` exists; the deployment smoke test and the nightly live eval are described, not built. The reports were generated by running the commands, not typed.
+**Outcome:** Verified by running: 231 backend and 20 frontend tests passed, ruff and `tsc` clean, `make build` ok, `make eval` 14/14 (and 70/70 with `--repeat 5`, no flaky cases), `make e2e` 2 passed. Pending the user's review; CI still to be verified by the user on GitHub.
 
 <!-- Add new entries below. Format: number, title, prompt summary, AI output, outcome (accepted / modified / rejected, and why). -->

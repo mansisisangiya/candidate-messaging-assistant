@@ -1,6 +1,6 @@
 # Candidate Messaging Assistant
 
-> **Status: Steps 1-8 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject, 7 eval harness and JSON logging, 8 minimal frontend and Playwright E2E).** The full flow (list conversations, draft with `FakeLLM`, read the trace, approve or reject) works in the API and in a deliberately plain UI (no UI library, router or state library). Verified by backend and frontend tests and two Playwright tests; CI has not run on GitHub yet. Unticked items in the checklist are not done.
+> **Status: Steps 1-9 complete (1 scaffolding, 2 data layer, 3 persistence and tools, 4 FakeLLM and agent loop, 5 state machine, drafting service and read/draft API, 6 injected failure, guardrails and approve/reject, 7 eval harness and JSON logging, 8 minimal frontend and Playwright E2E, 9 cleanup, eval criteria and documentation).** The full flow (list conversations, draft with `FakeLLM`, read the trace, approve or reject) works in the API and in a deliberately plain UI (no UI library, router or state library). Verified by backend and frontend tests and two Playwright tests; CI has not run on GitHub yet. Unticked items in the checklist are not done.
 
 ## Objective
 
@@ -28,7 +28,7 @@ Progress is tracked here. A box is ticked only after the item is implemented and
 - [x] Trace view: every step of the run with type, tool, short input/output and duration, error steps highlighted, and a warning banner when a run that did not fail has error steps (verified by tests and the Playwright run)
 - [ ] Execution history list in the UI (the UI shows only the latest run of a conversation; earlier runs are available through `GET /api/runs`)
 - [x] Structured JSON logging with run ids (stdlib, `run_id` via a context variable; checked in tests and in the output of a real uvicorn run)
-- [x] Tests: unit, data validation, integration, API, frontend component, browser E2E and eval harness (216 backend, 20 frontend, 2 Playwright; results in docs/TEST_STRATEGY.md)
+- [x] Tests: unit, data validation, integration, API, frontend component, browser E2E and eval harness (231 backend, 20 frontend, 2 Playwright; real output in [docs/reports/test-report.md](docs/reports/test-report.md), strategy in docs/TEST_STRATEGY.md)
 - [x] Automated AI evaluation harness with pass threshold (`make eval`: 14 cases labelled by criterion (task completion, groundedness, relevance, tool accuracy, safety, failure handling), default threshold 1.0, `--repeat N` for variance; runs against `FakeLLM`, so it checks the pipeline, not model quality)
 - [ ] GitHub Actions CI (workflow written with backend, frontend and e2e jobs; it has never run on GitHub, so this stays unticked)
 - [ ] Optional OpenAI client (not required to run anything)
@@ -40,6 +40,52 @@ Python 3.12, FastAPI, Pydantic, SQLite, React + TypeScript (Vite), pytest, Vites
 ## Out of scope
 
 Authentication, actually sending messages, streaming, background job queues, multi-user support, agent frameworks (LangChain etc.), vector databases.
+
+## Design decisions and assumptions
+
+- **`FakeLLM` is the default.** The agent depends on a small `LLMClient` protocol, so tests, CI and the demo are deterministic and need no key. The consequence is that nothing here measures real model quality.
+- **Fixtures plus SQLite.** Candidates, jobs, interviews and conversations are read-only JSON fixtures, validated at load time. Only run state (runs and their steps) is mutable and lives in SQLite (stdlib `sqlite3`).
+- **Synchronous runs.** `POST /drafts` runs the agent to completion and returns the finished run (201, also when it failed). No queue or worker; simple and explainable, but a slow model would block the request.
+- **Hand-written agent loop.** At most 6 LLM calls and 4 tool calls per response; every step is saved as it happens, so a failed run still has a trace. Assumption: the model either calls tools or returns the final draft text.
+- **One state machine.** A single transition table and one `transition()` function with a conditional write; approved, rejected and failed are terminal. Illegal moves return 409.
+- **Tool scoping.** The model chooses tool arguments, so a candidate message could try to make it look up someone else. Tools are bound to the conversation's candidate in code (not by prompt wording), and the transcript is fenced as untrusted text.
+- **Graceful degradation.** A failing tool is retried once and recorded; the draft then avoids relying on the missing data. The UI warns when a run has error steps.
+- **Guardrails** (non-empty, at most 1200 characters, no placeholders, no compensation talk unless the recruiter asked) fail the run, and the rejected text is never stored as a draft.
+
+## Authentication and authorization
+
+There is no login, by design: it is out of scope for the timebox. The access control that does exist is at the data level:
+
+- tools can only read the conversation's own candidate, enforced in code and covered by unit, integration and eval tests (including a prompt-injection case);
+- approve and reject are only allowed from the right state (`awaiting_approval`); anything else returns 409.
+
+A real deployment would add authentication and per-recruiter authorization on conversations and runs (who may view, draft, approve or reject), and would record who approved. None of that is built.
+
+## Limitations
+
+- `FakeLLM` writes template text: the evals and tests prove the pipeline, not model quality.
+- Runs are synchronous; SQLite is single-node.
+- The UI shows only the latest run of a conversation (earlier runs are available through `GET /api/runs`).
+- Guardrails are regex and keyword checks (a paraphrased salary mention would get through); the relevance eval is a keyword proxy.
+- No authentication or authorization (see above).
+- If the write to the `failed` state itself fails, the run stays in `running`.
+- CI is written but has not run on GitHub yet; no deploy, smoke-test, nightly or live-eval workflow exists.
+
+## Next steps (what I would add with more time)
+
+- An OpenAI client behind the existing protocol, plus a scheduled live-eval workflow with `--repeat` and a lower threshold, with results stored to track regressions.
+- A run-history view in the UI.
+- Redraft automatically after a guardrail violation.
+- TypeScript types generated from the OpenAPI schema instead of kept in sync by hand.
+- Authentication and per-recruiter authorization.
+- Background jobs for long runs.
+- Contract tests, visual regression tests and a load test.
+
+## Reports and screenshot
+
+- [docs/reports/test-report.md](docs/reports/test-report.md): real output of the test, lint, build, eval and E2E commands.
+- [docs/reports/eval-report.md](docs/reports/eval-report.md): the eval results per criterion, including a repeated run.
+- Screenshot: [docs/screenshots/draft-panel.png](docs/screenshots/draft-panel.png) (draft panel with the trace).
 
 ## Documentation
 
